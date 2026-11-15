@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#e3e7ea">
+<title>Turn on motion controls</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/remote.css">
+<link rel="stylesheet" href="/phone-setup.css">
+<script type="module" src="/phone-setup.js"></script>
+</head>
+<body class="setup-page">
+<main class="setup">
+  <p class="brand">Living Room Sports</p>
+  <article class="setup-card">
+    <h1>Turn on motion controls</h1>
+    <p class="lede">Phones only share their motion sensors with secure pages. Install the PC's certificate on this phone once, and the controller uses motion from then on.</p>
+    <p id="elsewhere" class="note" hidden>Open this page on the phone you will play with.</p>
+
+    <div class="choice" role="radiogroup" aria-label="Your phone">
+      <button type="button" role="radio" data-platform="ios" aria-checked="true">iPhone</button>
+      <button type="button" role="radio" data-platform="android" aria-checked="false">Android</button>
+    </div>
+
+    <ol id="steps-ios" class="steps">
+      <li>
+        <p>Download the certificate. When Safari asks about a configuration profile, tap <b>Allow</b>.</p>
+        <p id="safari-note" class="note" hidden></p>
+        <a class="action" href="/ca.crt">Download the certificate</a>
+      </li>
+      <li><p>Open <b>Settings</b> and tap <b>Profile Downloaded</b> near the top. Tap <b>Install</b>, enter your passcode, and tap <b>Install</b> on each screen that follows.</p></li>
+      <li><p>In Settings, go to <b>General › About › Certificate Trust Settings</b> and turn on <b>Living Room Sports local CA</b>.</p></li>
+      <li><p>Come back to this page. It checks again by itself.</p></li>
+    </ol>
+
+    <ol id="steps-android" class="steps" hidden>
+      <li>
+        <p>Download the certificate. It is saved to <b>Downloads</b>.</p>
+        <a class="action" href="/ca.crt?save" download="LivingRoomSports.crt">Download the certificate</a>
+      </li>
+      <li>
+        <p>Open <b>Settings</b>, search for <b>CA certificate</b> and open it. Tap <b>Install anyway</b>, then choose <b>LivingRoomSports.crt</b>.</p>
+        <p class="hint">On Samsung phones it is under Security and privacy › More security settings › Install from device storage. A phone without a screen lock asks you to set one first.</p>
+      </li>
+      <li>
+        <p>Come back to this page. It checks again by itself.</p>
+        <p class="hint">Use Chrome or Samsung Internet. Firefox ignores certificates installed in Settings.</p>
+      </li>
+    </ol>
+
+    <section id="trust" class="trust" data-state="checking" role="status" aria-live="polite">
+      <p id="trust-text">Checking whether this phone trusts the PC…</p>
+      <a id="open-controller" class="join-button" href="/remote" hidden>Open the controller</a>
+      <button id="check-again" class="secondary" type="button" hidden>Check again</button>
+    </section>
+  </article>
+
+  <details class="about">
+    <summary>About this certificate</summary>
+    <p>Living Room Sports made this certificate on your PC. It only vouches for addresses on private networks such as your home Wi-Fi, so it cannot be used to pose as a website on the internet.</p>
+    <p>To remove it from an iPhone, go to Settings › General › VPN &amp; Device Management. On Android, search Settings for <b>User credentials</b>.</p>
+  </details>
+  <a id="buttons-only" class="quiet-link" href="/remote">Use the controller without motion</a>
+</main>
+</body>
+</html>

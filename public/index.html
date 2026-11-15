@@ -1,11 +1,58 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Living Room Sports</title><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css"></head>
-<body class="dashboard"><header><a class="brand" href="/">living room <strong>sports</strong><span class="brand-dot"></span></a><div class="header-right"><span id="connection" role="status">Connecting…</span><button id="pair">＋ Pair a phone</button></div></header>
-<main><section id="menu"><div class="welcome"><div><p class="eyebrow">A little movement. A lot of good company.</p><h1>Make room for play.</h1><p>Pick a channel, grab your remote, and get into the game.</p></div><div class="date-clock"><time id="clock"></time><span id="date"></span></div></div>
-<div class="channel-shelf" id="channels" aria-label="Sports channels"></div><div class="shelf-caption"><span>Five sports. Four karts. Your living room.</span><span>← → Choose a channel · A / Enter to play</span></div>
-<section class="players-section"><div class="section-line"><h2>Your team</h2><span>Up to 4 players · Same Wi-Fi</span></div><div id="players" class="players"></div></section>
-<div class="menu-note"><span class="mini-remote">▦<br>●</span><p><strong>Your phone is your remote.</strong><br>Pair a phone to swing, point and play. Or try a game with the keyboard.</p><button id="pair-bottom">How to join</button></div></section>
-<section id="game" hidden><div class="game-heading"><button id="home">⌂ Home</button><div><h1 id="game-title"></h1><p id="game-help"></p></div><button id="restart">New match</button></div><label id="course-picker" hidden>Race course <select id="course"><option value="0">Seabreeze Circuit</option><option value="1">Copper Canyon</option><option value="2">Starlight Ring</option></select></label><div class="play-layout"><div class="arena"><canvas id="court" width="1000" height="560" aria-label="Sports playing field"></canvas><div id="result" role="status"></div></div><aside><p id="round"></p><h2 id="turn"></h2><div id="scores"></div><label id="power-label">Power <meter id="power" min="0" max="1" value="0.7"></meter></label><label id="timing-label">Timing · hit in blue <span class="timing-track"><i></i><b id="timing"></b></span></label><button id="action" class="primary">Play / Swing (A)</button><p id="controls-help" class="small">← → aim · Space / A swing<br>Hold B to charge or block<br>Home / Escape returns here<br>Shake or 1 to recenter</p></aside></div></section>
-</main><footer><span class="footer-pill">⌂ &nbsp; Home menu</span><span>Original games. Shared good times.</span><span id="player-count">0 remotes connected</span></footer>
-<dialog id="pair-dialog"><button class="close" id="close-pair" aria-label="Close pairing">×</button><h2>Scan to play.</h2><p>Up to four phones. Same Wi-Fi. Each scan joins automatically.</p><div id="join-links" role="status"></div><p>Room code <strong id="room-code"></strong></p><p class="small">Keep this dashboard open. Your phone will show an Allow motion button only if browser permission is needed. Motion requires a trusted HTTPS connection.</p></dialog>
-<script type="module" src="/dashboard.js"></script></body></html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Living Room Sports</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/menu.css">
+</head>
+<body class="console">
+<div class="stage" id="stage">
+  <section class="home" id="home" aria-label="Wii Menu">
+    <div class="grid-window"><div class="pages" id="pages"></div></div>
+    <button type="button" class="page-arrow prev" id="page-prev" aria-label="Previous page" data-sound="page" hidden><svg viewBox="0 0 24 40" aria-hidden="true"><path d="M17 6L5 20l12 14"/></svg></button>
+    <button type="button" class="page-arrow next" id="page-next" aria-label="Next page" data-sound="page"><svg viewBox="0 0 24 40" aria-hidden="true"><path d="M7 6l12 14L7 34"/></svg></button>
+    <div class="clock" id="clock" role="img"></div>
+    <div class="shelf">
+      <svg class="shelf-shape" id="shelf-shape" height="134" aria-hidden="true">
+        <defs>
+          <linearGradient id="shelf-gradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fdfefe"/><stop offset=".55" stop-color="#eef1f2"/><stop offset="1" stop-color="#dfe4e6"/></linearGradient>
+        </defs>
+        <path class="shelf-fill" fill="url(#shelf-gradient)"/>
+        <path class="shelf-shine" fill="none" stroke="#fff" stroke-width="3" transform="translate(0 3)"/>
+        <path class="shelf-edge" fill="none" stroke="#4cc6ef" stroke-width="2.5"/>
+      </svg>
+      <button type="button" class="shelf-button options" id="open-options" aria-label="Wii Options">
+        <span class="balloon">Wii Options</span><span class="shelf-word">Options</span>
+      </button>
+      <p class="date" id="date"></p>
+      <button type="button" class="shelf-button controllers" id="open-controllers" aria-label="Connect controllers">
+        <span class="balloon">Connect controllers</span>
+        <svg class="shelf-glyph" viewBox="0 0 64 64" aria-hidden="true"><rect x="22" y="6" width="20" height="44" rx="8"/><path d="M28 17h8M32 13v8"/><circle cx="32" cy="30" r="3.4"/></svg>
+        <span class="leds"><i class="led"></i><i class="led"></i><i class="led"></i><i class="led"></i></span>
+      </button>
+    </div>
+  </section>
+  <section class="preview" id="preview" aria-label="Channel" hidden>
+    <canvas class="banner" id="banner"></canvas>
+    <div class="preview-foot" id="preview-foot">
+      <p class="preview-status" id="preview-status" hidden></p>
+      <div class="preview-buttons">
+        <button type="button" class="wbtn big" id="preview-menu" data-sound="back"><span class="wbtn-label">Wii Menu</span></button>
+        <button type="button" class="wbtn big" id="preview-start" data-sound="start" data-default><span class="wbtn-label">Start</span></button>
+      </div>
+    </div>
+  </section>
+  <div class="views" id="views"></div>
+  <div class="zoomer" id="zoomer" hidden><canvas></canvas></div>
+  <div class="fade" id="fade"></div>
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <div class="offline" id="offline" role="alert" hidden><p>The console service has stopped.</p><p>Close this window and open Living Room Sports again from its shortcut.</p></div>
+  <div class="dialog-layer" id="dialog" hidden></div>
+  <div class="hands" id="hands" aria-hidden="true"></div>
+</div>
+<noscript><p class="noscript">The Wii Menu needs JavaScript. Open Living Room Sports from its shortcut.</p></noscript>
+<script type="module" src="/menu.js"></script>
+</body>
+</html>

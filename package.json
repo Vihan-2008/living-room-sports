@@ -3,6 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "scripts": { "start": "node server.js", "test": "node --test tests/app.test.js tests/gameplay.test.js tests/remote.test.js tests/qr.test.js tests/launcher.test.js", "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File launcher/install.ps1" },
+  "scripts": { "start": "node server.js", "test": "node --test tests/app.test.js tests/gameplay.test.js tests/remote.test.js tests/qr.test.js tests/launcher.test.js tests/console.test.js tests/console-api.test.js tests/phone-setup.test.js", "shortcut": "powershell -NoProfile -ExecutionPolicy Bypass -File launcher/install.ps1", "package": "powershell -NoProfile -ExecutionPolicy Bypass -File launcher/package.ps1" },
   "engines": { "node": ">=22" }
 }

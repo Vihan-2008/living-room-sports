@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import net from 'node:net';
-import { createApp, phoneAddresses } from '../server.js';
+import { createApp, lanAddresses, phoneAddresses } from '../server.js';
 import { sports, evaluate, nextTurn, timingAt } from '../public/games.js';
 
 async function fixture(t) {
@@ -40,9 +40,18 @@ test('phone links prefer home adapters and omit loopback, link-local and duplica
   assert.deepEqual(addresses, ['192.168.1.40', '172.20.0.1', '100.64.0.2'].map(ip => `http://${ip}:4321/remote?code=123456`));
   assert.deepEqual(phoneAddresses({}, 3000, '123456'), []);
 });
+test('the adapter with a default gateway comes first, whatever Windows calls it', () => {
+  const ipv4 = address => ({ address, family: 'IPv4', internal: false });
+  const interfaces = { 'Ethernet 3': [ipv4('192.168.56.1')], 'Wi-Fi': [ipv4('192.168.1.183')] };
+  assert.equal(phoneAddresses(interfaces, 3000, '123456')[0], 'http://192.168.56.1:3000/remote?code=123456', 'without gateway information the order is unchanged');
+  assert.deepEqual(phoneAddresses(interfaces, 3000, '123456', 'https', ['192.168.1.183']), ['https://192.168.1.183:3000/remote?code=123456'],
+    'a host-only adapter is never offered to phones once the home network is known');
+  assert.deepEqual(lanAddresses(interfaces, ['192.168.1.183']), ['192.168.1.183', '192.168.56.1'], 'the certificate still names every address');
+  assert.equal(phoneAddresses(interfaces, 3000, '123456', 'http', ['10.9.9.9']).length, 2, 'a stale gateway list never hides every address');
+});
 test('HTTP serves only public assets, join configuration and correct MIME types', async t => {
   const app = await fixture(t);
-  for (const path of ['/', '/remote', '/style.css', '/dashboard.js', '/remote.js', '/games.js', '/kart.js', '/sports-match.js', '/race-view.js']) {
+  for (const path of ['/', '/arcade', '/remote', '/phone-setup', '/style.css', '/dashboard.js', '/remote.js', '/games.js', '/kart.js', '/sports-match.js', '/race-view.js']) {
     const response = await fetch(app.base + path); assert.equal(response.status, 200); assert.ok((await response.text()).length > 100);
     if (path.endsWith('.js')) assert.match(response.headers.get('content-type'), /javascript/);
   }

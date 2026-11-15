@@ -2,7 +2,7 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, existsSync, linkSync, copyFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
@@ -60,7 +60,7 @@ test('the app icon is served and linked from the dashboard and the remote', asyn
   assert.equal(res.status, 200);
   assert.equal(res.headers.get('content-type'), 'image/svg+xml');
   assert.match(await res.text(), /^<svg [^>]*viewBox="0 0 256 256"/);
-  for (const page of ['index.html', 'remote.html'])
+  for (const page of ['index.html', 'arcade.html', 'remote.html', 'phone-setup.html'])
     assert.match(await readFile(join(project, 'public', page), 'utf8'), /<link rel="icon" href="\/icon\.svg" type="image\/svg\+xml">/);
 });
 
@@ -86,6 +86,7 @@ test('launcher starts the server on the chosen port, confirms it, and stops it o
   assert.match(log, /Started server \(pid \d+\)/);
   assert.deepEqual(localState(dataDir), { background_mode: { enabled: false } }, 'new browser profile cannot linger in the background');
   assert.match(log, new RegExp(`\\[server\\] Living Room Sports: http://localhost:${port}`));
+  assert.match(log, /Window: maximized\./);
   assert.match(log, /Check passed\.[\s\S]*Stopping server\./);
   assert.equal(await listening(port), false, 'server stopped with the launcher');
 });
@@ -127,4 +128,84 @@ test('launcher turns off background mode in an existing game profile and keeps i
   const { code, log } = await launch(['--check', '--port', String(await freePort()), '--project', project], dataDir);
   assert.equal(code, 0, log);
   assert.deepEqual(localState(dataDir), { ...before, background_mode: { enabled: false, other: 'kept' } });
+});
+
+// A stand-in project whose server answers like Living Room Sports: `state` is the body of a function that
+// returns what /api/state reports, and `setup` runs first.
+function fakeProject(name, { setup = '', state = 'return {};' } = {}) {
+  const fake = mkdtempSync(join(workDir(), `${name}-`));
+  mkdirSync(join(fake, 'public'));
+  writeFileSync(join(fake, 'public', 'index.html'), '<!doctype html>');
+  writeFileSync(join(fake, 'server.js'), `const http = require('node:http');
+${setup}
+const state = () => { ${state} };
+http.createServer((req, res) => res.end(JSON.stringify(req.url === '/api/state' ? state() : { code: '123456', addresses: [] })))
+  .listen(Number(process.env.PORT), '127.0.0.1');`);
+  return fake;
+}
+
+test('the portable build\'s own Node.js is used, and the server learns where the launcher and settings are', { skip: windowsOnly }, async () => {
+  const fake = fakeProject('portable', { setup: "console.log('node=' + process.execPath + ' launcher=' + process.env.LRS_LAUNCHER + ' data=' + process.env.LRS_DATA_DIR);" });
+  mkdirSync(join(fake, 'runtime'));
+  const bundled = join(fake, 'runtime', 'node.exe');
+  try { linkSync(process.execPath, bundled); } catch { copyFileSync(process.execPath, bundled); }
+  const dataDir = join(fake, 'data');
+  mkdirSync(dataDir);
+  writeFileSync(join(dataDir, 'settings.json'), JSON.stringify({ display: { startFullscreen: true } }));
+  const { code, log } = await launch(['--check', '--port', String(await freePort()), '--project', fake], dataDir);
+  assert.equal(code, 0, log);
+  assert.ok(log.includes(`Started server`) && log.includes(`with ${bundled}`), log);
+  assert.ok(log.includes(`node=${bundled} launcher=${build().exe} data=${dataDir}`), log);
+  assert.match(log, /Window: full screen\./, 'Wii Options › Start full screen is honoured');
+});
+
+test('--focus never starts anything or shows a message, with or without a window to focus', { skip: windowsOnly }, async () => {
+  const dataDir = join(workDir(), 'focus');
+  const started = Date.now();
+  const nothingOpen = spawn(build().exe, ['--focus', '--port', String(await freePort()), '--data-dir', dataDir]);
+  assert.deepEqual(await once(nothingOpen, 'exit'), [0, null]);
+  assert.ok(Date.now() - started < 10000);
+  assert.equal(existsSync(dataDir), false, 'no log, profile or server');
+  // A process with no window: --focus waits for one only while the process lives.
+  const windowless = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 1500)']);
+  const focus = spawn(build().exe, ['--focus', '--port', '3000', '--pid', String(windowless.pid)]);
+  assert.deepEqual(await once(focus, 'exit'), [0, null]);
+  const gone = spawn(build().exe, ['--focus', '--pid', '999999']);
+  assert.deepEqual(await once(gone, 'exit'), [0, null], 'a process that has already ended is not an error');
+});
+
+test('closing the Wii Menu during a game keeps the server up, and the menu returns when the game ends', { skip: windowsOnly }, async () => {
+  // A "browser" with no window that closes after a moment, as if the player closed the Wii Menu.
+  const dir = mkdtempSync(join(workDir(), 'browser-'));
+  writeFileSync(join(dir, 'browser.cs'), 'static class Browser { static void Main() { System.Threading.Thread.Sleep(1500); } }');
+  const csc = join(process.env.WINDIR, 'Microsoft.NET', 'Framework64', 'v4.0.30319', 'csc.exe');
+  const compiled = spawnSync(csc, ['/nologo', '/target:winexe', `/out:${join(dir, 'browser.exe')}`, join(dir, 'browser.cs')], { encoding: 'utf8' });
+  assert.equal(compiled.status, 0, compiled.stdout);
+  // The game ends four seconds after the server starts.
+  const fake = fakeProject('game', { setup: 'const started = Date.now();', state: 'return { dolphin: { running: Date.now() - started < 4000 } };' });
+  const port = await freePort();
+  const { code, log } = await launch(['--port', String(port), '--project', fake, '--browser', join(dir, 'browser.exe')]);
+  assert.equal(code, 0, log);
+  const events = log.split(/\r?\n/).map(line => line.slice(14)).filter(line => /^(Opening app window|App window closed|The window closed|Opening the Wii Menu|Stopping server)/.test(line));
+  assert.deepEqual(events.map(line => line.split(':')[0].split(';')[0]), ['Opening app window', 'App window closed.', 'The window closed while a game is running',
+    'Opening the Wii Menu again.', 'Opening app window', 'App window closed.', 'Stopping server.']);
+  assert.equal(await listening(port), false, 'and once the menu is closed with no game running, everything stops');
+});
+
+test('the portable build runs on its own: launcher, server, pages and Node.js in one folder', { skip: windowsOnly }, async () => {
+  const out = join(workDir(), 'package');
+  const result = spawnSync('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', join(project, 'launcher', 'package.ps1'), '-OutDir', out, '-NoZip'], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  const folder = join(out, 'Living Room Sports');
+  for (const file of ['Living Room Sports.exe', 'Add Shortcuts.cmd', 'server.js', 'qr.js', 'package.json', 'README.md', 'public/index.html', 'public/remote.html',
+    'public/phone-setup.html', 'console/dolphin.js', 'runtime/node.exe', 'runtime/Node.js LICENSE.txt']) assert.ok(existsSync(join(folder, file)), file);
+  for (const left of ['tests', 'launcher', '.claude', 'check.py', 'AGENTS.md']) assert.equal(existsSync(join(folder, left)), false, `${left} stays out`);
+  const port = await freePort(), dataDir = join(workDir(), 'portable-data');
+  const child = spawn(join(folder, 'Living Room Sports.exe'), ['--check', '--port', String(port), '--data-dir', dataDir]);
+  const [code] = await once(child, 'exit');
+  const log = readFileSync(join(dataDir, 'launcher.log'), 'utf8');
+  assert.equal(code, 0, log);
+  assert.ok(log.includes(`with ${join(folder, 'runtime', 'node.exe')}`), log);
+  assert.ok(log.includes(`[server] Living Room Sports: http://localhost:${port}`), log);
+  assert.ok(existsSync(join(dataDir, 'settings.json')), 'the server keeps its settings in the launcher\'s data folder');
 });

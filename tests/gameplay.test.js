@@ -136,7 +136,7 @@ test('all courses support complete races with finite results and CPU competition
 // Run the actual dashboard event handlers and renderer against a minimal DOM.
 // This catches wiring errors without adding a browser dependency to the local app.
 async function dashboard({ href = 'http://localhost:3000/', config = { code: '123456', addresses: [], local: '/remote' }, ok = true } = {}) {
-  const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const html = await readFile(new URL('../public/arcade.html', import.meta.url), 'utf8');
   const source = await readFile(new URL('../public/dashboard.js', import.meta.url), 'utf8');
   const handlers = {}, timers = [], elements = new Map();
   const ctx = new Proxy({}, { get: (target, key) => target[key] ?? (() => {}) });
