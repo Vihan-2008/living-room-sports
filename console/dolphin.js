@@ -118,6 +118,9 @@ export function launchArgs({ userDir, game, fullscreen = true, backgroundInput =
     '-C', `Dolphin.Display.Fullscreen=${fullscreen ? 'True' : 'False'}`,
     // Borderless full screen is an ordinary window, so the game can move to another screen.
     '-C', 'Graphics.Settings.BorderlessFullscreen=True',
+    // Auto (Window Size): drawn at the smallest whole multiple of the Wii's 640 × 528 that covers the window, so
+    // 3× on a 1920 × 1080 screen and 4× on a 2560 × 1600 one, recalculated when the game moves screens.
+    '-C', 'Graphics.Settings.InternalResolution=0',
     '-C', 'Dolphin.Interface.ConfirmStop=False',
     // Warnings go to the log instead of a pop-up that needs a mouse; the menu shows that log if a game fails.
     '-C', 'Dolphin.Interface.UsePanicHandlers=False',
