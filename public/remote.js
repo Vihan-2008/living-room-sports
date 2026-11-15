@@ -132,7 +132,9 @@ function applyActivity(next) {
   const steps = activity.mode === 'game' ? activity.path || [] : [];
   $('game-guide').hidden = !steps.length;
   $('game-steps').replaceChildren(...steps.map(text => { const li = document.createElement('li'); li.textContent = text; return li; }));
-  $('quit-game').hidden = activity.mode !== 'game';
+  $('quit-game').hidden = $('quit-note').hidden = activity.mode !== 'game';
+  $('move-game').hidden = activity.mode !== 'game' || !(activity.screens > 1);
+  $('move-game').textContent = activity.screens > 2 ? 'Move the game to the next screen' : 'Move the game to the other screen';
   resetQuit();
   fit();
   startPad();
@@ -255,12 +257,13 @@ if (stickEl) {
   stickEl.onpointerup = stickEl.onpointercancel = event => { if (event.pointerId === stickPointer) { releaseStick(); sendPad(); } };
 }
 
-// ---- Sheet: recenter, the in-game path, quit, leave ---------------------------------------------
+// ---- Sheet: recenter, the in-game path, moving the game, quit, leave ----------------------------
 function openSheet() { $('sheet').hidden = false; $('more-button').setAttribute?.('aria-expanded', 'true'); }
 function closeSheet() { $('sheet').hidden = true; $('more-button').setAttribute?.('aria-expanded', 'false'); resetQuit(); }
 $('more-button').onclick = () => ($('sheet').hidden ? openSheet() : closeSheet());
 $('sheet-close').onclick = closeSheet;
 function resetQuit() { clearTimeout(quitTimer); $('quit-game').textContent = 'Quit the game'; $('quit-game').classList.remove('confirm'); }
+$('move-game').onclick = () => { send({ type: 'screen' }); closeSheet(); };
 // Two taps, so a stray touch never ends a game.
 $('quit-game').onclick = () => {
   if (!$('quit-game').classList.contains('confirm')) {

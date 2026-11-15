@@ -162,8 +162,9 @@ function playingView(ctx) {
   const canvas = h('canvas', { class: 'playing-art' });
   const info = h('div', { class: 'playing-info' });
   const close = button('Close the game', () => confirmClose(), { sound: 'select' });
+  const move = button('Move to the other screen', () => ctx.attempt(() => ctx.api('/api/screen', { to: 'next' })), { sound: 'select' });
   const el = frame({ title: 'Now playing', className: 'playing-screen', onBack: () => confirmClose(), backLabel: 'Close the game',
-    body: h('div', { class: 'playing-layout' }, h('div', { class: 'playing-banner' }, canvas), info), actions: [] });
+    body: h('div', { class: 'playing-layout' }, h('div', { class: 'playing-banner' }, canvas), info), actions: [move] });
   el.querySelector('.frame-foot .back').remove();
   el.querySelector('.frame-foot').prepend(close);
   let raf = 0;
@@ -189,9 +190,14 @@ function playingView(ctx) {
       h('p', { class: 'muted' }, item ? TITLE_NAMES[title] : mode ? mode.name : ''),
       h('p', { class: 'small' }, stopping ? 'Closing Dolphin…' : 'Dolphin has the game in its own window. This screen comes back when the game closes.'),
       path.length ? h('h3', {}, 'In the game') : null, path.length ? steps(path) : null,
+      h('h3', {}, 'Quitting'),
+      h('p', { class: 'small' }, 'Press Home in the game and choose Wii Menu, press Esc on the keyboard, or choose Quit the game in a phone\'s ⋯ menu.'),
       roles?.length ? h('h3', {}, 'Controllers') : null,
       roles?.length ? h('ul', { class: 'roles' }, roles.filter(r => r.kind !== 'off').map(r => h('li', {}, h('span', { class: 'role-player', style: { background: PLAYER_COLORS[r.slot - 1] } }, `P${r.slot}`), h('span', {}, `${PLAYER_KIND_NAMES[r.kind]}: ${r.as}`)))) : null);
     close.disabled = !!stopping;
+    const screens = state.screens?.length || 0;
+    move.hidden = screens < 2 || !!stopping;
+    move.querySelector('.wbtn-label').textContent = screens > 2 ? 'Move to the next screen' : 'Move to the other screen';
   }
 
   const tick = now => { drawChannel(canvas, shown, now / 1000, true, ctx.scale); raf = requestAnimationFrame(tick); };

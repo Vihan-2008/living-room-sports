@@ -1,12 +1,13 @@
 // Finds Dolphin and its user folder, launches a game with this console's controller setup,
 // watches the process, and puts every changed Dolphin setting back when the game ends.
 import { spawn as nodeSpawn, execFile } from 'node:child_process';
-import { access, mkdir, readFile, readdir, writeFile, stat } from 'node:fs/promises';
+import { access, mkdir, open, readFile, readdir, writeFile, stat } from 'node:fs/promises';
 import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { readValue, createJournal } from './ini.js';
 import { buildLaunchPlan, DSU_NAME } from './profiles.js';
 import { identify } from './disc.js';
+import { findScreen, nextScreen, placeWindow } from './screens.js';
 
 export const exists = path => access(path).then(() => true, () => false);
 
@@ -109,10 +110,18 @@ export function classifyExit(code, signal, runtimeMs) {
   return { kind: 'error', message: 'Dolphin closed with an error.', detail: `It closed with exit code ${code ?? signal}. Anything the game saved before then is kept.` };
 }
 
+// Dolphin's warnings, written to Logs\dolphin.log (as "W[MASTER]" lines) for the console to read.
+export const LOG_CONFIG = ['Logger.Options.WriteToFile=True', 'Logger.Options.Verbosity=3', 'Logger.Logs.MASTER=True'];
+
 export function launchArgs({ userDir, game, fullscreen = true, backgroundInput = true, dsuEntries, config = [] }) {
   const args = ['-b', '-u', userDir, '-e', game,
     '-C', `Dolphin.Display.Fullscreen=${fullscreen ? 'True' : 'False'}`,
+    // Borderless full screen is an ordinary window, so the game can move to another screen.
+    '-C', 'Graphics.Settings.BorderlessFullscreen=True',
     '-C', 'Dolphin.Interface.ConfirmStop=False',
+    // Warnings go to the log instead of a pop-up that needs a mouse; the menu shows that log if a game fails.
+    '-C', 'Dolphin.Interface.UsePanicHandlers=False',
+    ...LOG_CONFIG.flatMap(item => ['-C', item]),
     '-C', `Dolphin.Input.BackgroundInput=${backgroundInput ? 'True' : 'False'}`];
   if (dsuEntries) args.push('-C', 'DualShockUDPClient.Server.Enabled=True', '-C', `DualShockUDPClient.Server.Entries=${dsuEntries}`);
   for (const item of config) args.push('-C', item);
@@ -126,7 +135,39 @@ export function dsuEntries(existing, port) {
   return [...kept.map(entry => `${entry};`), ours].join('');
 }
 
+// HOME › Wii Menu in a game asks for the Wii Menu. Unless one was installed into Dolphin from a real Wii, Dolphin
+// has none, and the game would hang. Dolphin logs the request from its ES module ("...missing from the NAND"),
+// and the console takes it to mean what it means on a Wii: leave the game for the menu.
+export function asksForWiiMenu(line) {
+  return /ES[\\/]ES\.cpp:\d+ W\[MASTER\]/.test(line) && /Wii Menu|NAND/.test(line);
+}
+
 const logSize = file => stat(file).then(info => info.size, () => 0);
+
+// Reads what Dolphin adds to its log from byte `from` on, a whole line at a time. Returns a function that stops.
+export function followLog(file, from, onLine, every = 1000) {
+  let offset = from, rest = '', busy = false;
+  const timer = setInterval(async () => {
+    if (busy) return;
+    busy = true;
+    try {
+      const size = await logSize(file);
+      if (size < offset) { offset = 0; rest = ''; } // the log was cleared
+      if (size === offset) return;
+      const handle = await open(file, 'r');
+      try {
+        const length = Math.min(size - offset, 1 << 20);
+        const { bytesRead, buffer } = await handle.read(Buffer.alloc(length), 0, length, offset);
+        offset += bytesRead;
+        const lines = (rest + buffer.subarray(0, bytesRead).toString('utf8')).split(/\r?\n/);
+        rest = lines.pop();
+        for (const line of lines) onLine(line);
+      } finally { await handle.close(); }
+    } catch {} finally { busy = false; }
+  }, every);
+  timer.unref?.();
+  return () => clearInterval(timer);
+}
 // Dolphin appends to one log across runs, so only what this run wrote (from byte `from` on) is shown.
 async function tail(file, from, lines = 12) {
   try {
@@ -141,10 +182,14 @@ export class LaunchError extends Error {
   constructor(code, message, step, status = 409) { super(message); this.code = code; this.step = step; this.status = status; }
 }
 
+// displays: the screen helper from screens.js, or null where windows cannot be moved. logEvery and settleMs are
+// shortened by the tests.
 export function createDolphinManager({ settings, dataDir, dsuPort = () => null, onChange = () => {}, focusApp = () => {},
-  spawn = nodeSpawn, processes = listProcesses, close = closeProcess, userDirOf = exe => resolveUserDir(exe), identifyDisc = identify } = {}) {
+  spawn = nodeSpawn, processes = listProcesses, close = closeProcess, userDirOf = exe => resolveUserDir(exe), identifyDisc = identify,
+  displays = null, logEvery = 1000, settleMs = 2500 } = {}) {
   const journal = createJournal(join(dataDir, 'dolphin-journal.json'));
-  let session = null, lastExit = null, stopping = null;
+  let session = null, lastExit = null, stopping = null, moving = null;
+  const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 
   const state = () => ({
     running: !!session, title: session?.title || null, sport: session?.sport || null, pid: session?.child.pid || null,
@@ -176,7 +221,7 @@ export function createDolphinManager({ settings, dataDir, dsuPort = () => null, 
     await journal.restore();
     let plan = { roles: [], config: [] };
     if (s.controls.layouts === 'console') {
-      plan = buildLaunchPlan(request.title, s.controls.players, { keyboardP1: s.controls.keyboardP1, deadzone: s.controls.gameDeadzone });
+      plan = buildLaunchPlan(request.title, s.controls.players, { sport: request.sport, keyboardP1: s.controls.keyboardP1, deadzone: s.controls.gameDeadzone });
       for (const profile of plan.profiles) {
         const folder = join(userDir, 'Config', 'Profiles', profile.type);
         await mkdir(folder, { recursive: true });
@@ -208,27 +253,67 @@ export function createDolphinManager({ settings, dataDir, dsuPort = () => null, 
         reject(new LaunchError('spawn-failed', `Dolphin could not be started: ${error.message}`, 'Choose Dolphin.exe again in Wii Options › Setup.', 500));
       });
     });
+    const current = session;
+    current.unfollow = followLog(logFile, logStart, line => {
+      if (session === current && !current.requested && asksForWiiMenu(line)) stop({ reason: 'wii-menu' }).catch(() => {});
+    }, logEvery);
     child.once('exit', async (code, signal) => {
       // The game counts as running until Dolphin's settings are back, so nothing starts or shuts down mid-restore.
       const finished = session;
+      finished.unfollow();
       const runtime = Date.now() - startedAt;
       // A close the player asked for is never reported as a failure, however soon or however it ended.
       const result = finished.requested ? { kind: 'stopped', message: 'The game was closed.', detail: null } : classifyExit(code, signal, runtime);
       const restored = await journal.restore().catch(error => ({ failures: [{ error: error.message }] }));
       const log = result.kind === 'stopped' ? null : await tail(logFile, logStart);
       lastExit = { ...result, code, title: finished.title, sport: finished.sport, at: Date.now(), runtime, log,
-        restoreFailed: restored.failures?.length ? restored.failures : undefined };
+        closedBy: finished.requested || null, restoreFailed: restored.failures?.length ? restored.failures : undefined };
       session = null; stopping = null;
       focusApp();
       changed();
       ended();
     });
     changed();
+    if (displays && s.launch.screen !== 'main') placeGame(current, s.launch.screen).catch(() => {});
     return state();
   }
 
+  // Dolphin opens its game window on the main screen: small at first, then full screen a moment later, on
+  // whichever screen the window is on by then. So the window is moved once it appears and checked again after.
+  async function placeGame(current, choice) {
+    let { window } = await displays.gameWindow(current.child.pid, 20000);
+    for (let attempt = 0; attempt < 3 && window && session === current; attempt++) {
+      const target = findScreen(displays.screens, choice), from = findScreen(displays.screens, window.screen);
+      if (!target || !from || target.id === from.id) return;
+      await displays.move(window.handle, placeWindow(window, from, target));
+      await delay(settleMs);
+      ({ window } = await displays.gameWindow(current.child.pid, 0));
+    }
+  }
+
+  // Moves the running game to another screen ('next', or a screen's id) and keeps that screen for later games.
+  async function moveTo(to = 'next') {
+    if (!session) throw new LaunchError('not-running', 'No game is running.', 'Start a game first.');
+    if (!displays) throw new LaunchError('unsupported', 'Moving the game between screens needs Windows.', null);
+    if (moving) return moving;
+    const current = session;
+    moving = (async () => {
+      const { window } = await displays.gameWindow(current.child.pid, 0);
+      if (!window) throw new LaunchError('no-window', 'Dolphin has not opened the game window yet.', 'Wait for the game to appear, then try again.');
+      const from = findScreen(displays.screens, window.screen);
+      const target = to === 'next' ? nextScreen(displays.screens, from?.id) : findScreen(displays.screens, to);
+      if (!from || !target) throw new LaunchError('one-screen', 'Only one screen is connected.', 'Connect another screen, then try again.');
+      if (target.id !== from.id) await displays.move(window.handle, placeWindow(window, from, target));
+      await settings.save({ launch: { screen: target.primary ? 'main' : target.id } });
+      changed();
+      return state();
+    })();
+    try { return await moving; } finally { moving = null; }
+  }
+
   // Asks Dolphin to close like its window's close button; forces it only if it does not respond.
-  async function stop({ foreign = false } = {}) {
+  // reason: 'player' (Quit or Close the game) or 'wii-menu' (the game asked for the Wii Menu).
+  async function stop({ foreign = false, reason = 'player' } = {}) {
     if (foreign) {
       const s = await settings.load();
       for (const pid of await foreignDolphins(s.dolphinPath)) await close(pid);
@@ -236,7 +321,7 @@ export function createDolphinManager({ settings, dataDir, dsuPort = () => null, 
     }
     if (!session) return state();
     const { child: { pid }, ended } = session;
-    session.requested = true;
+    session.requested ??= reason;
     stopping ??= (async () => {
       changed();
       await close(pid);
@@ -251,5 +336,5 @@ export function createDolphinManager({ settings, dataDir, dsuPort = () => null, 
     return state();
   }
 
-  return { launch, stop, state, restore: () => journal.restore(), foreignDolphins, clearLastExit: () => { lastExit = null; changed(); } };
+  return { launch, stop, moveTo, state, restore: () => journal.restore(), foreignDolphins, clearLastExit: () => { lastExit = null; changed(); } };
 }

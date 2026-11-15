@@ -23,6 +23,11 @@ function panel(title, ...children) { return h('section', { class: 'panel' }, tit
 function pathText(path) { return h('p', { class: 'path-text' }, path); }
 // What a person types into a phone's browser: no scheme and no room code.
 const shortAddress = url => url.replace(/^https?:\/\//, '').replace(/\?code=.*/, '');
+// " on the second screen" when games open somewhere other than the main screen, and that screen is connected.
+function gameScreenName(state) {
+  const screen = (state.screens || []).find(s => !s.primary && s.id === state.settings.launch.screen);
+  return screen ? ` on the ${screen.name.toLowerCase()}` : '';
+}
 
 // ---- Wii Options hub ----------------------------------------------------------------------------
 function optionsView(ctx) {
@@ -31,7 +36,7 @@ function optionsView(ctx) {
     { id: 'controllers', name: 'Controllers', detail: () => 'Who plays with what, a test screen, menu buttons and dead zones' },
     { id: 'phones', name: 'Phones', detail: s => { const n = ctx.roster.filter(p => p.connected).length; return n ? `${n} connected` : 'Scan the code with a phone to join'; } },
     { id: 'display', name: 'Screen and sound', detail: s => `${s.settings.display.aspect === 'auto' ? 'Automatic' : s.settings.display.aspect} picture, sounds ${s.settings.display.sounds ? 'on' : 'off'}` },
-    { id: 'dolphin', name: 'Dolphin', detail: s => (s.dolphin.found ? `Dolphin ${s.dolphin.version || ''}, games start ${s.settings.launch.fullscreen ? 'full screen' : 'in a window'}`.replace('  ', ' ') : 'Not set up yet') }
+    { id: 'dolphin', name: 'Dolphin', detail: s => (s.dolphin.found ? `Dolphin ${s.dolphin.version || ''}, games start ${s.settings.launch.fullscreen ? 'full screen' : 'in a window'}${gameScreenName(s)}`.replace('  ', ' ') : 'Not set up yet') }
   ];
   const buttons = items.map((item, i) => h('button', { type: 'button', class: 'option', dataset: { option: item.id, ...(i === 0 ? { default: '' } : {}) }, onClick: () => ctx.go(item.id) },
     h('span', { class: 'option-name' }, item.name), h('span', { class: 'option-detail' }, '')));
@@ -429,16 +434,34 @@ function displayView(ctx) {
   return { el, update: render, dispose: () => { document.removeEventListener('fullscreenchange', syncFullscreen); removeEventListener('resize', syncFullscreen); } };
 }
 
+// Which screen Dolphin's game window opens on. The sizes are real pixels, so a scaled screen shows its true size.
+function gameScreenSetting(ctx, screens, chosen) {
+  if (screens.length < 2) return setting('Game screen', h('p', { class: 'small muted' }, 'Main screen'), 'Connect another screen to choose where games open.');
+  const value = screens.some(s => s.id === chosen) ? chosen : 'main';
+  const sizes = screens.map((s, i) => `${i ? s.name.toLowerCase() : s.name} ${s.width} × ${s.height}`).join(', ');
+  return setting('Game screen',
+    segmented(screens.map(s => ({ value: s.primary ? 'main' : s.id, label: s.name })), value, next => ctx.save({ launch: { screen: next } }), { label: 'Game screen' }),
+    `${sizes}. A game that is already running moves from Now playing or a phone's ⋯ menu.`);
+}
+
 function dolphinView(ctx) {
   const settingsPanel = h('div', { class: 'panel settings-panel' });
+  const screenSlot = h('div', { class: 'setting-slot' });
   const info = h('div', { class: 'panel stack' });
-  let built = false;
+  let built = false, screensShown = null;
   const render = state => {
+    const screenKey = JSON.stringify([state.screens, state.settings.launch.screen]);
+    if (screenKey !== screensShown) {
+      screensShown = screenKey;
+      keepFocus(screenSlot, () => fill(screenSlot, gameScreenSetting(ctx, state.screens || [], state.settings.launch.screen)));
+    }
     if (!built) {
       built = true;
+      ctx.api('/api/screens', {}).catch(() => {}); // screens may have been plugged in since the console started
       const { launch, controls } = state.settings;
-      fill(settingsPanel, 
+      fill(settingsPanel,
         setting('Start games full screen', onOff(launch.fullscreen, value => ctx.save({ launch: { fullscreen: value } }), 'Start games full screen')),
+        screenSlot,
         setting('Controllers work while Dolphin is behind another window', onOff(launch.backgroundInput, value => ctx.save({ launch: { backgroundInput: value } }), 'Background input'),
           'Keeps phones and the DualSense working if a notification takes focus.'),
         setting('Controller layouts', segmented([{ value: 'console', label: 'Set by this app' }, { value: 'dolphin', label: 'Dolphin\'s own' }], controls.layouts, value => ctx.save({ controls: { layouts: value } }), { label: 'Controller layouts' }),

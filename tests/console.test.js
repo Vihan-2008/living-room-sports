@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { once, EventEmitter } from 'node:events';
-import { mkdtemp, mkdir, writeFile, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, appendFile, readFile, readdir, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { deflateSync } from 'node:zlib';
@@ -14,7 +14,9 @@ import { setValues, readValue, createJournal } from '../console/ini.js';
 import { buildLaunchPlan, wiimoteProfile, phoneDevice } from '../console/profiles.js';
 import { createDsuServer, crc32, padFromPhone, PROTOCOL_VERSION } from '../console/dsu.js';
 import { createAuthority, issueServerCertificate, createCertificateStore, isPermittedAddress } from '../console/certs.js';
-import { candidatePaths, findDolphin, resolveUserDir, classifyExit, launchArgs, dsuEntries, createDolphinManager } from '../console/dolphin.js';
+import { candidatePaths, findDolphin, resolveUserDir, classifyExit, launchArgs, dsuEntries, createDolphinManager, asksForWiiMenu, followLog } from '../console/dolphin.js';
+import { createDisplays } from '../console/screens.js';
+import { fakeWindows, until, SECOND, MAIN_ONLY } from './fake-windows.js';
 import { PHONE_TO_DSU, mkwRows, remoteRows } from '../public/bindings.js';
 import { SPORTS, ENTRY_COUNT, activityNeeds, activityGuide, MKW_MODES, sportById } from '../public/catalog.js';
 
@@ -153,7 +155,7 @@ test('Mario Kart Wii: DualSense becomes GameCube port 1, phones become sideways 
   assert.equal(plan.roles[1].as, 'Wii Remote 2 (held sideways)');
 });
 
-test('sports titles attach the Nunchuk, Resort adds MotionPlus, and real or keyboard players are handled', () => {
+test('sports titles attach the Nunchuk, Resort adds MotionPlus and a Nunchuk only where the sport uses one, and real or keyboard players are handled', () => {
   const sports = buildLaunchPlan('sports', ['phone', 'keyboard', 'wiimote', 'dualsense']);
   assert.deepEqual(sports.config, ['Dolphin.Core.SIDevice0=0', 'Dolphin.Core.SIDevice1=0', 'Dolphin.Core.SIDevice2=0', 'Dolphin.Core.SIDevice3=0']);
   assert.equal(sports.controls.WiimoteSource2, '2');
@@ -171,9 +173,20 @@ test('sports titles attach the Nunchuk, Resort adds MotionPlus, and real or keyb
   const dualsense = sports.profiles.find(p => p.name.includes('P4')).text;
   assert.match(dualsense, /IMUGyroscope\/Pitch Up = `SDL\/0\/DualSense Wireless Controller:Gyro Pitch Up` \| `SDL\/0\/PS5 Controller:Gyro Pitch Up`/);
   assert.match(dualsense, /IMUIR\/Enabled = True/);
-  const resort = buildLaunchPlan('resort', ['phone', 'off', 'off', 'off']);
-  assert.match(resort.profiles[0].text, /Extension\/Attach MotionPlus = True/);
-  assert.equal(resort.roles[0].as, 'Wii Remote 1 + Nunchuk + MotionPlus');
+  // Resort stops and asks for anything plugged into the MotionPlus to be disconnected, unless the sport uses it.
+  for (const sport of [null, 'golf', 'swordplay', 'table-tennis', 'air-sports']) {
+    const resort = buildLaunchPlan('resort', ['phone', 'off', 'off', 'off'], { sport });
+    assert.match(resort.profiles[0].text, /Extension = None/, `${sport}: nothing in the MotionPlus`);
+    assert.match(resort.profiles[0].text, /Extension\/Attach MotionPlus = True/);
+    assert.equal(resort.roles[0].as, 'Wii Remote 1 + MotionPlus');
+  }
+  for (const sport of ['archery', 'power-cruising', 'cycling']) {
+    const resort = buildLaunchPlan('resort', ['phone', 'dualsense', 'off', 'off'], { sport });
+    assert.match(resort.profiles[0].text, /Extension = Nunchuk/, `${sport} is played with the Nunchuk`);
+    assert.equal(resort.roles[1].as, 'Wii Remote 2 + Nunchuk + MotionPlus');
+  }
+  assert.match(buildLaunchPlan('sports', ['phone', 'off', 'off', 'off'], { sport: 'golf' }).profiles[0].text, /Extension = Nunchuk/,
+    'Wii Sports ignores a spare Nunchuk, so it stays ready for Boxing');
   assert.throws(() => buildLaunchPlan('zelda', []));
   assert.equal(phoneDevice(3), 'DSUClient/3/LivingRoomPhones');
   assert.equal(Object.keys(wiimoteProfile({ kind: 'phone', index: 0 })).filter(k => k.startsWith('Nunchuk')).length, 0);
@@ -324,6 +337,10 @@ test('launch arguments, DSU entries and exit classification', () => {
   const args = launchArgs({ userDir: 'U', game: 'G.rvz', fullscreen: false, backgroundInput: true, dsuEntries: 'LivingRoomPhones:127.0.0.1:26760;', config: ['Dolphin.Core.SIDevice0=6'] });
   assert.deepEqual(args.slice(0, 5), ['-b', '-u', 'U', '-e', 'G.rvz']);
   assert.ok(args.includes('Dolphin.Display.Fullscreen=False') && args.includes('Dolphin.Interface.ConfirmStop=False') && args.includes('Dolphin.Core.SIDevice0=6'));
+  assert.ok(args.includes('Graphics.Settings.BorderlessFullscreen=True'), 'full screen is a window that can move to another screen');
+  assert.ok(args.includes('Dolphin.Interface.UsePanicHandlers=False'), 'warnings never stop the game with a pop-up');
+  for (const item of ['Logger.Options.WriteToFile=True', 'Logger.Options.Verbosity=3', 'Logger.Logs.MASTER=True']) assert.ok(args.includes(item), `${item}: warnings reach the log`);
+  for (let i = 5; i < args.length; i += 2) assert.equal(args[i], '-C', 'every setting is passed with -C, so none is saved to Dolphin\'s own files');
   assert.equal(dsuEntries('DS4Windows:127.0.0.1:26760;LivingRoomPhones:127.0.0.1:1;', 26761), 'DS4Windows:127.0.0.1:26760;LivingRoomPhones:127.0.0.1:26761;');
   assert.equal(dsuEntries('', 26760), 'LivingRoomPhones:127.0.0.1:26760;');
   assert.equal(classifyExit(0, null, 60000).kind, 'stopped');
@@ -334,7 +351,8 @@ test('launch arguments, DSU entries and exit classification', () => {
   assert.equal(classifyExit(1, null, 30000).kind, 'error');
 });
 
-async function dolphinFixture(t, { players = ['dualsense', 'phone', 'off', 'off'], foreign = [] } = {}) {
+// manager: extra options for createDolphinManager (a screen helper, quicker timings).
+async function dolphinFixture(t, { players = ['dualsense', 'phone', 'off', 'off'], foreign = [], manager: extra = {} } = {}) {
   const dir = await temp(t);
   const exe = join(dir, 'Dolphin', 'Dolphin.exe'), userDir = join(dir, 'DolphinUser'), game = join(dir, 'mkw.iso');
   await mkdir(join(dir, 'Dolphin'), { recursive: true }); await writeFile(exe, 'stub');
@@ -354,7 +372,7 @@ async function dolphinFixture(t, { players = ['dualsense', 'phone', 'off', 'off'
   const manager = createDolphinManager({ settings, dataDir: join(dir, 'data'), dsuPort: () => 26761, spawn,
     processes: async () => [...foreign, ...spawned.filter(s => !s.exited).map(s => s.child.pid)],
     close: async (pid, force) => { closed.push([pid, force]); const s = spawned.find(x => x.child.pid === pid); if (s && !force) { s.exited = true; s.child.emit('exit', 0, null); } },
-    userDirOf: async () => ({ dir: userDir, reason: 'test' }), focusApp: pid => { focused.push(pid ?? 'menu'); }, onChange: state => changes.push(state) });
+    userDirOf: async () => ({ dir: userDir, reason: 'test' }), focusApp: pid => { focused.push(pid ?? 'menu'); }, onChange: state => changes.push(state), ...extra });
   return { dir, exe, userDir, game, settings, manager, spawned, closed, changes, focused };
 }
 
@@ -389,6 +407,7 @@ test('stopping asks Dolphin to close; missing setup and a foreign Dolphin give t
   await f.manager.stop();
   assert.deepEqual(f.closed, [[4100, undefined]]);
   assert.equal(f.manager.state().lastExit.kind, 'stopped', 'a requested close is not an error, even seconds after launch');
+  assert.equal(f.manager.state().lastExit.closedBy, 'player');
   await assert.rejects(readFile(join(f.userDir, 'GameSettings', 'RMCE01.ini')), { code: 'ENOENT' });
   await assert.rejects(f.manager.launch({ title: 'sports' }), error => error.code === 'no-game' && /Setup/.test(error.step));
   await f.settings.save({ titles: { sports: join(f.dir, 'gone.iso') } });
@@ -409,4 +428,86 @@ test('with "use Dolphin\'s own controller settings", no profile or game setting 
   await assert.rejects(readFile(join(f.userDir, 'GameSettings', 'RMCE01.ini')), { code: 'ENOENT' });
   assert.ok(!f.spawned[0].args.some(a => a.startsWith('Dolphin.Core.SIDevice')));
   f.spawned[0].child.emit('exit', 0, null);
+});
+
+// ---- Quitting from inside the game, and the game's screen ---------------------------------------
+const WII_MENU_LINE = String.raw`41:02:117 Core\IOS\ES\ES.cpp:395 W[MASTER]: Warning: Could not launch the Wii Menu because it is missing from the NAND.`;
+
+test('a game asking for the Wii Menu is recognised in Dolphin\'s log, even when a line arrives in pieces', async t => {
+  assert.ok(asksForWiiMenu(WII_MENU_LINE));
+  assert.ok(asksForWiiMenu('41:02:117 Core/IOS/ES/ES.cpp:395 W[MASTER]: Warnung: Das Wii-Menü fehlt im NAND.'), 'a translated message still names the NAND');
+  assert.ok(!asksForWiiMenu(String.raw`39:40:915 Core\Boot\Boot.cpp:208 W[MASTER]: Warning: The specified file "x.rvz" does not exist`));
+  assert.ok(!asksForWiiMenu('The emulated software will likely hang now.'));
+  const file = join(await temp(t), 'dolphin.log');
+  await writeFile(file, 'old line\n');
+  const lines = [];
+  t.after(followLog(file, 9, line => lines.push(line), 5));
+  await appendFile(file, 'first half of a li');
+  await new Promise(resolve => setTimeout(resolve, 30));
+  await appendFile(file, 'ne\nsecond\n');
+  await until(() => lines.length === 2);
+  assert.deepEqual(lines, ['first half of a line', 'second'], 'only what was added, a whole line at a time');
+});
+
+test('Home › Wii Menu in the game closes it the way Quit does; a line left by an earlier game does not', async t => {
+  const f = await dolphinFixture(t, { manager: { logEvery: 5 } });
+  const log = join(f.userDir, 'Logs', 'dolphin.log');
+  await mkdir(join(f.userDir, 'Logs'), { recursive: true });
+  await writeFile(log, `${WII_MENU_LINE}\nThe emulated software will likely hang now.\n`);
+  await f.manager.launch({ title: 'mkw' });
+  await new Promise(resolve => setTimeout(resolve, 40));
+  assert.deepEqual(f.closed, [], 'what earlier games wrote is not read');
+  await appendFile(log, `41:01:002 Core\\Boot\\Boot.cpp:500 N[MASTER]: Booting\n${WII_MENU_LINE}\nThe emulated software will likely hang now.\n`);
+  await until(() => !f.manager.state().running);
+  assert.deepEqual(f.closed, [[4100, undefined]], 'Dolphin is asked to close normally');
+  assert.deepEqual([f.manager.state().lastExit.kind, f.manager.state().lastExit.closedBy], ['stopped', 'wii-menu']);
+});
+
+test('a game opens on the screen chosen for it, checked again once Dolphin has gone full screen', async t => {
+  const windows = fakeWindows({ refuse: 1 });
+  const f = await dolphinFixture(t, { manager: { displays: createDisplays({ run: windows.run }), settleMs: 5 } });
+  await f.settings.save({ launch: { screen: SECOND } });
+  await f.manager.launch({ title: 'mkw' });
+  await until(() => windows.window.x >= 1920);
+  await until(() => windows.calls.length >= 5);
+  assert.equal(windows.calls[0].LRS_WAIT, '20000', 'it waits for Dolphin to open the window');
+  assert.deepEqual(windows.moves, ['2544,45,1312,1038', '2544,45,1312,1038'], 'moved again when the first move did not hold');
+  assert.deepEqual(windows.window, { handle: '2428142', x: 2544, y: 45, width: 1312, height: 1038 });
+
+  const untouched = fakeWindows();
+  const g = await dolphinFixture(t, { manager: { displays: createDisplays({ run: untouched.run }) } });
+  await g.manager.launch({ title: 'mkw' });
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.equal(untouched.calls.length, 0, 'a game for the main screen is left where Dolphin puts it');
+
+  const unplugged = fakeWindows();
+  const h = await dolphinFixture(t, { manager: { displays: createDisplays({ run: unplugged.run }), settleMs: 5 } });
+  await h.settings.save({ launch: { screen: String.raw`\\.\DISPLAY9` } });
+  await h.manager.launch({ title: 'mkw' });
+  await until(() => unplugged.calls.length >= 1);
+  await new Promise(resolve => setTimeout(resolve, 30));
+  assert.deepEqual(unplugged.moves, [], 'a chosen screen that has been unplugged leaves the game on the main screen');
+});
+
+test('a running game moves to the other screen and the next game opens there too', async t => {
+  const windows = fakeWindows({ window: { x: 0, y: 0, width: 1920, height: 1080 } });
+  const f = await dolphinFixture(t, { manager: { displays: createDisplays({ run: windows.run }) } });
+  await assert.rejects(f.manager.moveTo(), { code: 'not-running' });
+  await f.manager.launch({ title: 'mkw' });
+  await f.manager.moveTo('next');
+  assert.deepEqual(windows.window, { handle: '2428142', x: 1920, y: -212, width: 2560, height: 1600 }, 'a full-screen game fills the 2560 × 1600 screen');
+  assert.equal((await f.settings.load()).launch.screen, SECOND);
+  await f.manager.moveTo('next');
+  assert.deepEqual(windows.window, { handle: '2428142', x: 0, y: 0, width: 1920, height: 1080 });
+  assert.equal((await f.settings.load()).launch.screen, 'main');
+
+  const alone = await dolphinFixture(t, { manager: { displays: createDisplays({ run: fakeWindows({ screens: MAIN_ONLY }).run }) } });
+  await alone.manager.launch({ title: 'mkw' });
+  await assert.rejects(alone.manager.moveTo(), error => error.code === 'one-screen' && /Connect another screen/.test(error.step));
+  const early = await dolphinFixture(t, { manager: { displays: createDisplays({ run: fakeWindows({ window: null }).run }) } });
+  await early.manager.launch({ title: 'mkw' });
+  await assert.rejects(early.manager.moveTo(), { code: 'no-window' });
+  const elsewhere = await dolphinFixture(t);
+  await elsewhere.manager.launch({ title: 'mkw' });
+  await assert.rejects(elsewhere.manager.moveTo(), { code: 'unsupported' });
 });

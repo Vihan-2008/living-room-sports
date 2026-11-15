@@ -229,6 +229,7 @@ small { display: block; margin-top: 3px; font-size: calc(12px * var(--scale)); f
 .sheet-action.danger { color: var(--danger); }
 .sheet-action.danger.confirm { color: #fff; background: var(--danger); box-shadow: none; }
 .sheet-action.quiet { color: var(--wii-deep); background: transparent; box-shadow: none; }
+.sheet-note { margin: -2px 6px 4px; font-size: 13px; line-height: 1.4; color: #55606a; text-align: center; }
 
 @media (prefers-reduced-motion: reduce) {
   .knob, .dial-face { transition: none; }
