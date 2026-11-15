@@ -1,19 +1,23 @@
-// The phone controller. On the Wii Menu it is a Wii Remote: point to move a hand, A selects. In a game it
-// streams a full controller state for Dolphin (buttons, Nunchuk stick, pointer, accelerometer and gyro) and
-// changes its layout to what the game needs: the Wii Remote, the Wii Remote with a Nunchuk, or a Wii Wheel.
-import { createCalibration, remoteMotion, pointerFrom, orientationSpeed, steeringAngle, stickFrom, screenAngle, layoutRotation, unrotate } from './phone-motion.js';
+// The controller page, for a phone or an iPad. On the Wii Menu it is a Wii Remote: point to move a hand, A
+// selects. In a game it streams a full controller state for Dolphin (buttons, Nunchuk stick, pointer,
+// accelerometer and gyro) and changes its layout to what the game needs: the Wii Remote, the Wii Remote with
+// a Nunchuk, or a Wii Wheel. It follows the screen, upright or in landscape.
+import { createCalibration, remoteMotion, heldMotion, pointerFrom, orientationSpeed, steeringAngle, stickFrom, screenAngle, controllerView, controllerScale, deviceKind, unrotate } from './phone-motion.js';
 
 const $ = id => document.getElementById(id);
 const PAD_MS = { game: 16, menu: 50 };   // full controller state: 60 a second in a game, 20 on the menu
 const POINTER_MS = 33;                   // menu pointer updates
+const SETTLE_MS = 600, MOVING_SPEED = 100; // the screen is followed once the device turns slower than 100°/s for 0.6 s
+const DEVICE = deviceKind(navigator.userAgent, navigator.maxTouchPoints); // phone, iPad or tablet
 const MOTION_TEXT = {
   active: 'Motion on',
   waiting: 'Motion is starting…',
   permission: 'Motion needs your permission',
   denied: 'Motion is off. The buttons still work.',
-  insecure: 'Motion is off until this phone trusts the PC.',
-  unavailable: 'This phone reports no motion. The buttons still work.'
+  insecure: `Motion is off until this ${DEVICE} trusts the PC.`,
+  unavailable: `This ${DEVICE} reports no motion. The buttons still work.`
 };
+document.querySelectorAll('[data-device]').forEach(el => { el.textContent = DEVICE; });
 const DIRECTIONS = new Set(['up', 'down', 'left', 'right']);
 
 let socket = null, joined = false, desired = false, reconnectTimer = null, padTimer = null, sensorTimer = null, quitTimer = null;
@@ -62,7 +66,7 @@ function connect() {
     if (msg.type === 'joined') onJoined(msg);
     else if (msg.type === 'activity') applyActivity(msg);
     else if (msg.type === 'rumble') navigator.vibrate?.(msg.duration);
-    else if (msg.type === 'kicked') { desired = false; showJoin('The console removed this phone. Join again to play.'); }
+    else if (msg.type === 'kicked') { desired = false; showJoin(`The console removed this ${DEVICE}. Join again to play.`); }
     else if (msg.type === 'error') { desired = false; showJoin(msg.message); socket.close(); }
   };
   socket.onclose = () => {
@@ -71,7 +75,7 @@ function connect() {
     releaseAll();
     if (desired) { setStatus('Connection lost. Reconnecting…'); reconnectTimer = setTimeout(connect, 1500); }
   };
-  socket.onerror = () => setStatus('Cannot reach the console. Check that this phone is on the same Wi-Fi as the PC.');
+  socket.onerror = () => setStatus(`Cannot reach the console. Check that this ${DEVICE} is on the same Wi-Fi as the PC.`);
 }
 
 function onJoined(msg) {
@@ -82,7 +86,7 @@ function onJoined(msg) {
   $('slot-label').textContent = `P${slot}`;
   document.querySelectorAll('.led').forEach((led, i) => led.classList.toggle('on', i === slot - 1));
   $('slot-note').hidden = msg.inGames !== false;
-  $('slot-note').textContent = msg.inGames === false ? `This phone works the Wii Menu. In games, player ${slot} uses the controller chosen in Wii Options.` : '';
+  $('slot-note').textContent = msg.inGames === false ? `This ${DEVICE} works the Wii Menu. In games, player ${slot} uses the controller chosen in Wii Options.` : '';
   setStatus(msg.returning ? `Welcome back, player ${slot}.` : `You are player ${slot}.`);
   enableMotion();
   keepAwake();
@@ -135,18 +139,29 @@ function applyActivity(next) {
   reportStatus();
 }
 
-// Turns the controller so it lies along the phone the way its layout is held, whatever the browser did.
-let turn = 0;
+// ---- Screen: the controller follows it once the device is held still -----------------------------
+// A swing or a hard turn of the wheel can tip the browser into turning the page. Until the device has been
+// still for a moment the controller keeps its shape, turned back against the page, so nothing moves under the
+// player's thumbs and the motion readings keep their meaning.
+let view = controllerView('remote', 0, 0), shownAngle = null, movingUntil = 0, settleTimer = null;
 function fit() {
-  const el = $('remote-controls');
-  turn = layoutRotation(layout, screenAngle(globalThis.screen, globalThis.orientation));
-  el.dataset.turn = String(turn);
-  const w = globalThis.innerWidth, h = globalThis.innerHeight;
-  if (!Number.isFinite(w) || !Number.isFinite(h) || !el.style) return;
-  const sideways = Math.abs(turn) === 90;
-  el.style.width = `${sideways ? h : w}px`;
-  el.style.height = `${sideways ? w : h}px`;
-  el.style.transform = `translate(-50%, -50%) rotate(${turn}deg)`;
+  clearTimeout(settleTimer);
+  const actual = screenAngle(globalThis.screen, globalThis.orientation);
+  const wait = movingUntil - performance.now();
+  if (shownAngle === null || wait <= 0) shownAngle = actual;
+  else if (shownAngle !== actual) settleTimer = setTimeout(fit, wait);
+  const width = globalThis.innerWidth, height = globalThis.innerHeight;
+  const next = controllerView(layout, shownAngle, actual, width, height);
+  if (next.hold !== view.hold) base = null; // the pointer starts again from wherever the new pointing end points
+  view = next;
+  const frame = $('remote-controls'), controller = $('controller');
+  frame.dataset.turn = String(view.turn);
+  controller.dataset.shape = view.shape;
+  if (!Number.isFinite(width) || !Number.isFinite(height)) return;
+  frame.style.width = `${view.width}px`;
+  frame.style.height = `${view.height}px`;
+  frame.style.transform = `translate(-50%, -50%) rotate(${view.turn}deg)`;
+  controller.style.setProperty('--scale', String(controllerScale(width, height)));
 }
 window.addEventListener('resize', fit);
 window.addEventListener('orientationchange', fit);
@@ -218,7 +233,7 @@ for (const button of document.querySelectorAll('[data-button]')) {
 const stickEl = $('stick'), knob = $('stick-knob');
 function moveStick(event) {
   const r = stickEl.getBoundingClientRect(), radius = r.width / 2 * 0.72;
-  const [dx, dy] = unrotate(event.clientX - (r.left + r.width / 2), event.clientY - (r.top + r.height / 2), turn);
+  const [dx, dy] = unrotate(event.clientX - (r.left + r.width / 2), event.clientY - (r.top + r.height / 2), view.turn);
   stick = stickFrom(dx, dy, radius);
   knob.style.transform = `translate(${stick[0] * radius}px, ${-stick[1] * radius}px)`;
 }
@@ -313,8 +328,8 @@ function onOrientation(event) {
   const reading = { alpha: event.alpha, beta: event.beta, gamma: Number.isFinite(event.gamma) ? event.gamma : 0 };
   if (lastOrientation) calibration.rates(lastRate, orientationSpeed(lastOrientation, reading, (now - lastOrientationAt) / 1000));
   lastOrientation = reading; lastOrientationAt = now;
-  base ??= { alpha: reading.alpha, beta: reading.beta };
-  pointer = pointerFrom(reading, base);
+  base ??= reading;
+  pointer = pointerFrom(reading, base, view.hold);
   setMotion('active');
   if (now - lastPointerSend >= POINTER_MS) { lastPointerSend = now; sendMenu({ pointing: true }); }
 }
@@ -324,8 +339,11 @@ function onMotion(event) {
   const g = event.accelerationIncludingGravity, rate = event.rotationRate;
   const vector = g && [g.x, g.y, g.z].every(Number.isFinite) ? [g.x, g.y, g.z] : null;
   if (vector && lastOrientation) calibration.gravity(vector, lastOrientation.beta, lastOrientation.gamma);
-  if (rate) lastRate = Math.hypot(rate.alpha || 0, rate.beta || 0, rate.gamma || 0);
-  latest = remoteMotion(vector, rate, calibration.state);
+  if (rate) {
+    lastRate = Math.hypot(rate.alpha || 0, rate.beta || 0, rate.gamma || 0);
+    if (lastRate * calibration.state.gyroScale > MOVING_SPEED) movingUntil = performance.now() + SETTLE_MS;
+  }
+  latest = heldMotion(remoteMotion(vector, rate, calibration.state), view.hold);
   if (layout === 'wheel' && $('wheel-dial').style) $('wheel-dial').style.transform = `rotate(${-steeringAngle(latest.a).toFixed(1)}deg)`;
   setMotion('active');
   if (activity.mode !== 'game') swingAndShake(event);

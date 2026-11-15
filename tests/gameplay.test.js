@@ -217,7 +217,8 @@ async function dashboard({ href = 'http://localhost:3000/', config = { code: '12
   const context = vm.createContext({ sports, evaluate, timingAt, createSportsMatch, resolveShot, matchLabel, matchResult, createRace, raceInput, stepRace, standings, drawRace,
     document: { getElementById: id => { assert.ok(elements.has(id), `Missing element ${id}`); return elements.get(id); }, createElement: element, querySelectorAll: () => [], addEventListener: (name, callback) => { handlers[name] = callback; } },
     window: { addEventListener: (name, callback) => { handlers[name] = callback; } },
-    location: new URL(href), URL,
+    // A plain object, so the page can navigate by assigning location.href as it does in a browser.
+    location: (({ href, protocol, host, hostname, origin, pathname }) => ({ href, protocol, host, hostname, origin, pathname }))(new URL(href)), URL,
     WebSocket: class { static OPEN = 1; constructor() { this.readyState = 1; } send() {} },
     performance: { now: () => now }, fetch: async () => ({ ok, json: async () => config }),
     requestAnimationFrame() {}, setInterval() {}, setTimeout: callback => { timers.push(callback); return timers.length; }, clearTimeout: id => { if (id) timers[id - 1] = null; }, console
@@ -364,6 +365,32 @@ test('solo tennis and boxing results correctly name the CPU winner after losses'
     assert.equal(app.run('finished'), true, id);
     assert.match(app.elements.get('result').textContent, /CPU wins/);
   }
+});
+
+test('the Wii Menu button and Home on the channel list go back to the Wii Menu; Home in a game does not', async () => {
+  const button = await dashboard({ href: 'http://localhost:3000/arcade' });
+  button.elements.get('wii-menu').onclick();
+  assert.equal(button.run('location.href'), '/');
+
+  for (const press of [
+    app => app.run("input({ slot: 2, button: 'home', pressed: true });"),
+    app => app.handlers.keydown({ key: 'Escape', target: { matches: () => false }, preventDefault() {} })
+  ]) {
+    const app = await dashboard({ href: 'http://localhost:3000/arcade' });
+    app.run(`players = ${JSON.stringify(players(2).map(p => ({ ...p, connected: true })))}; start(sports.findIndex(s => s.id === 'bowling'));`);
+    app.run("input({ slot: 1, button: 'home', pressed: true });");
+    assert.equal(app.run('game'), null, 'Home in a game returns to the channel list');
+    assert.equal(app.run('location.href'), 'http://localhost:3000/arcade', 'and stays in the arcade');
+    app.run("input({ slot: 2, button: 'home', pressed: false });");
+    assert.equal(app.run('location.href'), 'http://localhost:3000/arcade', 'A release alone does nothing');
+    press(app);
+    assert.equal(app.run('location.href'), '/');
+  }
+  const pairing = await dashboard({ href: 'http://localhost:3000/arcade' });
+  pairing.elements.get('pair').onclick();
+  pairing.run("input({ slot: 1, button: 'home', pressed: true });");
+  assert.equal(pairing.elements.get('pair-dialog').open, false, 'Home closes the pairing dialog first');
+  assert.equal(pairing.run('location.href'), 'http://localhost:3000/arcade');
 });
 
 test('two or more phones get head-to-head tennis and boxing with a row per side', async () => {

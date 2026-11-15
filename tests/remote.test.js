@@ -8,6 +8,10 @@ import * as motion from '../public/phone-motion.js';
 const html = await readFile(new URL('../public/remote.html', import.meta.url), 'utf8');
 const source = (await readFile(new URL('../public/remote.js', import.meta.url), 'utf8')).replace(/^import .*$/m, '');
 const close = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-6, `${message}: ${actual} is not ${expected}`);
+const IPAD = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15';
+const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1';
+const PIXEL = 'Mozilla/5.0 (Linux; Android 15; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36';
+const GALAXY_TAB = 'Mozilla/5.0 (Linux; Android 14; SM-X710) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
 
 // ---- Motion maths -------------------------------------------------------------------------------
 test('a phone held like a remote reports the remote\'s own axes', () => {
@@ -54,15 +58,26 @@ test('the pointer follows the phone: turning right moves it right, lifting the t
   assert.deepEqual(motion.pointerFrom({ alpha: 200, beta: 80 }, base), { x: 1, y: -1 }, 'and stops at the screen edge');
 });
 
-test('layouts lie along the phone the way they are held, however the page is turned', () => {
+test('the controller follows the screen, and the wheel is drawn across an upright one', () => {
   assert.equal(motion.screenAngle({ orientation: { angle: 90 } }), 90);
   assert.equal(motion.screenAngle(undefined, -90), 270, 'iOS reports the other landscape as -90');
   assert.equal(motion.screenAngle(undefined, undefined), 0);
-  assert.equal(motion.layoutRotation('remote', 0), 0);
-  assert.equal(motion.layoutRotation('remote', 90), -90, 'a page the browser turned sideways is turned back for the remote');
-  assert.equal(motion.layoutRotation('wheel', 0), 90, 'with rotation locked, the wheel is drawn across the phone');
-  assert.equal(motion.layoutRotation('wheel', 90), 0);
-  assert.equal(motion.layoutRotation('wheel', 270), -180, 'held the other way round, the wheel shows upside down until the phone is turned');
+  const view = (...args) => { const { turn, shape, hold, width, height } = motion.controllerView(...args); return { turn, shape, hold, width, height }; };
+  assert.deepEqual(view('remote', 0, 0, 390, 844), { turn: 0, shape: 'portrait', hold: 0, width: 390, height: 844 });
+  assert.deepEqual(view('remote', 90, 90, 844, 390), { turn: 0, shape: 'landscape', hold: 90, width: 844, height: 390 },
+    'in landscape the remote lies across the screen, its pointing end the screen\'s top edge: the device\'s right side');
+  assert.equal(view('nunchuk', 270, 270, 844, 390).hold, 270);
+  assert.deepEqual(view('wheel', 0, 0, 390, 844), { turn: 90, shape: 'landscape', hold: 0, width: 844, height: 390 },
+    'on an upright screen the wheel is drawn across, for the phone turned top edge to the left');
+  assert.deepEqual(view('wheel', 90, 90, 844, 390), { turn: 0, shape: 'landscape', hold: 0, width: 844, height: 390 });
+  assert.equal(view('wheel', 270, 270, 844, 390).hold, 180, 'turned the other way, the wheel\'s left is the device\'s bottom edge');
+  assert.deepEqual(view('remote', 0, 90, 844, 390), { turn: -90, shape: 'portrait', hold: 0, width: 390, height: 844 },
+    'until the new angle is taken up, the page is turned back and nothing changes');
+  assert.deepEqual(view('remote', 0, 0, 1280, 800), { turn: 0, shape: 'landscape', hold: 0, width: 1280, height: 800 },
+    'a tablet that is landscape at 0° is laid out by its shape, not its angle');
+  assert.equal(view('wheel', 0, 0, 1280, 800).hold, 270);
+  assert.equal(view('wheel', 180, 180, 820, 1180).turn, 90, 'an iPad upside down');
+  assert.equal(view('remote', 90, 90).shape, 'landscape', 'with no size known, the angle decides');
   // A touch below the centre of a stick drawn a quarter-turn clockwise is the stick's own right.
   const [x, y] = motion.unrotate(0, 10, 90);
   close(x, 10, 'x'); close(y, 0, 'y');
@@ -72,15 +87,46 @@ test('layouts lie along the phone the way they are held, however the page is tur
   assert.ok(motion.steeringAngle([0.9, 0.4]) > 20, 'tipping the left end down steers left');
 });
 
+test('in landscape the motion and the pointer are read along the screen\'s top edge', () => {
+  const calibration = motion.createCalibration().state;
+  const held = (gravity, rate, hold) => motion.heldMotion(motion.remoteMotion(gravity, rate, calibration), hold);
+  // Turned top edge to the left and pointed at the floor: the device's right edge, the screen's top, points down.
+  assert.deepEqual(held([-9.80665, 0, 0], null, 90).a, [0, -1, 0]);
+  assert.deepEqual(held([0, 0, 9.80665], null, 90).a, [0, 0, 1], 'lying level reads level either way round');
+  // Lifting the pointing end turns the device about its y axis, and gamma falls as its right edge lifts.
+  assert.deepEqual(held(null, { alpha: 0, beta: 0, gamma: -30 }, 90).g, [30, 0, 0]);
+  assert.deepEqual(held(null, { alpha: 20, beta: 0, gamma: 0 }, 270).g, [0, -20, 0], 'turning flat is yaw whichever edge points ahead');
+  close(motion.steeringAngle(held([-9.80665, 0, 0], null, 180).a), 0, 'the wheel held the other way round, its left (the device\'s bottom) up, is level');
+  const base = { alpha: 40, beta: 5, gamma: 2 };
+  assert.deepEqual(motion.pointerFrom({ alpha: 40, beta: 5, gamma: -6 }, base, 90), { x: 0, y: -0.5 }, 'lifting the right edge points up');
+  assert.deepEqual(motion.pointerFrom({ alpha: 40, beta: 5, gamma: -6 }, base, 0), { x: 0, y: 0 }, 'upright the same turn is a roll, not a pitch');
+  assert.deepEqual(motion.pointerFrom({ alpha: 40, beta: 5, gamma: 10 }, base, 270), { x: 0, y: -0.5 });
+});
+
+test('an iPad gets a larger controller and is called an iPad', () => {
+  assert.equal(motion.controllerScale(390, 844), 1);
+  assert.equal(motion.controllerScale(844, 390), 1, 'either way round');
+  assert.equal(motion.controllerScale(320, 568), 1, 'never smaller than on a phone; the room left caps the keys instead');
+  assert.equal(motion.controllerScale(820, 1180), 1.475);
+  assert.equal(motion.controllerScale(1180, 820), 1.475);
+  assert.equal(motion.controllerScale(2560, 1440), 1.75);
+  assert.equal(motion.deviceKind(IPAD, 5), 'iPad', 'an iPad asking for the desktop page');
+  assert.equal(motion.deviceKind('Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)', 5), 'iPad');
+  assert.equal(motion.deviceKind(IPHONE, 5), 'phone');
+  assert.equal(motion.deviceKind(GALAXY_TAB, 10), 'tablet', 'Android tablets leave "Mobile" out');
+  assert.equal(motion.deviceKind(PIXEL, 5), 'phone');
+});
+
 // ---- The page -----------------------------------------------------------------------------------
 // The real remote.js, with the motion module supplied and the browser faked.
-async function remote({ search = '?code=123456', secure = true, motionType = {}, orientationType = {}, fetch = undefined, stored = {} } = {}) {
+async function remote({ search = '?code=123456', secure = true, motionType = {}, orientationType = {}, fetch = undefined, stored = {},
+  size = [390, 844], angle = 0, userAgent = IPHONE, maxTouchPoints = 5 } = {}) {
   const elements = new Map(), handlers = {}, sockets = [], timers = new Map(), intervals = new Map(), replaced = [];
   const storage = new Map(Object.entries(stored));
   let timerId = 0, now = 3000;
   function element(id = null) {
     const classes = new Set();
-    return { id, value: '', hidden: false, textContent: '', dataset: {}, style: { setProperty() {} }, children: [],
+    return { id, value: '', hidden: false, textContent: '', dataset: {}, style: { setProperty(name, value) { this[name] = value; } }, children: [],
       classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name),
         toggle: (name, force) => ((force ?? !classes.has(name)) ? classes.add(name) : classes.delete(name)) },
       addEventListener() {}, setPointerCapture() {}, setAttribute() {},
@@ -90,16 +136,18 @@ async function remote({ search = '?code=123456', secure = true, motionType = {},
   for (const [, id] of html.matchAll(/id="([^"]+)"/g)) elements.set(id, element(id));
   const buttons = [...html.matchAll(/data-button="([^"]+)"/g)].map(([, name]) => { const b = element(); b.dataset.button = name; return b; });
   const leds = [0, 1, 2, 3].map(() => element());
+  const deviceWords = [...html.matchAll(/data-device/g)].map(() => element());
   const document = { hidden: false, documentElement: { style: { setProperty() {} } },
     getElementById: id => { assert.ok(elements.has(id), `Missing element ${id}`); return elements.get(id); },
-    querySelectorAll: selector => (selector === '[data-button]' ? buttons : selector === '.held' ? buttons.filter(b => b.classList.contains('held')) : selector === '.led' ? leds : []),
+    querySelectorAll: selector => ({ '[data-button]': buttons, '.held': buttons.filter(b => b.classList.contains('held')), '.led': leds, '[data-device]': deviceWords })[selector] ?? [],
     createElement: () => element(),
     addEventListener: (name, fn) => { handlers[name] = fn; } };
-  const context = vm.createContext({ ...motion, document,
+  const screen = { orientation: { angle, addEventListener: (name, fn) => { handlers[`screen ${name}`] = fn; } } };
+  const context = vm.createContext({ ...motion, document, screen, innerWidth: size[0], innerHeight: size[1],
     window: { isSecureContext: secure, DeviceMotionEvent: motionType, DeviceOrientationEvent: orientationType, addEventListener: (name, fn) => { handlers[name] = fn; } },
     location: { search, protocol: secure ? 'https:' : 'http:', host: 'pc.local:3000', hostname: 'pc.local', replace: url => replaced.push(url) },
     localStorage: { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, String(value)) },
-    URLSearchParams, AbortController, Promise, fetch, navigator: { vibrate() {} }, performance: { now: () => now },
+    URLSearchParams, AbortController, Promise, fetch, navigator: { vibrate() {}, userAgent, maxTouchPoints }, performance: { now: () => now },
     WebSocket: class {
       static OPEN = 1; static CONNECTING = 0;
       constructor(url) { this.url = url; this.readyState = 0; this.sent = []; this.events = []; sockets.push(this); }
@@ -123,9 +171,12 @@ async function remote({ search = '?code=123456', secure = true, motionType = {},
     const handler = type === 'lostpointercapture' ? 'onlostpointercapture' : `onpointer${type}`;
     buttons.filter(b => b.dataset.button === name)[index][handler]({ pointerId, preventDefault() {} });
   }
-  return { elements, $, handlers, sockets, timers, intervals, replaced, storage, document, buttons, join, activity, pointer,
+  return { elements, $, handlers, sockets, timers, intervals, replaced, storage, document, buttons, deviceWords, join, activity, pointer,
     settle: () => new Promise(resolve => setImmediate(resolve)), // lets the motion permission answer arrive
     tick: (ms = 1000) => { now += ms; },
+    // The browser turns the page: a new screen angle and page size, then the screen's change event.
+    turnScreen(degrees, width, height) { screen.orientation.angle = degrees; context.innerWidth = width; context.innerHeight = height; handlers['screen change'](); },
+    sendPad: () => [...intervals.values()][0].fn(),
     sensors(alpha = 90, beta = 20) { handlers.deviceorientation({ alpha, beta, gamma: 0 }); handlers.devicemotion({ acceleration: { x: 30, y: 0, z: 0 }, accelerationIncludingGravity: { x: 0, y: 0, z: 9.8 }, rotationRate: { alpha: 0, beta: 0, gamma: 0 } }); } };
 }
 const inputs = socket => socket.sent.filter(m => m.type === 'input');
@@ -309,6 +360,52 @@ test('in a game the phone becomes Dolphin\'s controller and changes shape to mat
   assert.deepEqual(pads(socket).at(-1).b, [], 'buttons held for the last layout are let go');
   assert.equal(app.$('remote-controls').dataset.turn, '90', 'a portrait page draws the wheel across the phone');
   assert.equal(app.$('game-guide').hidden, true);
+});
+
+test('turned to landscape the controller lies across the screen, and its top edge still points at the TV', async () => {
+  const app = await remote(), socket = app.join(); await app.settle();
+  const frame = app.$('remote-controls');
+  assert.equal(app.$('controller').dataset.shape, 'portrait');
+  app.turnScreen(90, 844, 390);
+  assert.equal(app.$('controller').dataset.shape, 'landscape');
+  assert.equal(frame.dataset.turn, '0', 'drawn the way the browser lays the page out');
+  assert.deepEqual([frame.style.width, frame.style.height], ['844px', '390px']);
+  app.handlers.deviceorientation({ alpha: 90, beta: 0, gamma: 0 });
+  app.tick(); app.handlers.deviceorientation({ alpha: 90, beta: 0, gamma: -8 });
+  assert.equal(inputs(socket).at(-1).y, -0.5, 'lifting the right edge, now the top, moves the hand up');
+  app.handlers.devicemotion({ accelerationIncludingGravity: { x: -9.80665, y: 0, z: 0 }, rotationRate: { alpha: 0, beta: 0, gamma: 0 } });
+  app.sendPad();
+  assert.deepEqual(pads(socket).at(-1).a, [0, -1, 0], 'Dolphin sees the remote pointed at the floor');
+  app.activity(socket, { mode: 'game', title: 'mkw', layout: 'wheel', nunchuk: false, name: 'Mario Kart Wii', path: [] });
+  assert.deepEqual([frame.dataset.turn, app.$('controller').dataset.shape], ['0', 'landscape'], 'the wheel needs no turning in landscape');
+});
+
+test('a swing that tips the browser into turning the page changes nothing until the phone is still', async () => {
+  const app = await remote(), socket = app.join(); await app.settle();
+  const frame = app.$('remote-controls'), still = { alpha: 0, beta: 0, gamma: 0 };
+  app.handlers.devicemotion({ accelerationIncludingGravity: { x: 0, y: 0, z: 9.8 }, rotationRate: { alpha: 0, beta: 400, gamma: 0 } });
+  app.turnScreen(90, 844, 390);
+  assert.equal(app.$('controller').dataset.shape, 'portrait');
+  assert.equal(frame.dataset.turn, '-90', 'the page is turned back against the browser');
+  assert.deepEqual([frame.style.width, frame.style.height], ['390px', '844px']);
+  app.handlers.devicemotion({ accelerationIncludingGravity: { x: 0, y: -9.80665, z: 0 }, rotationRate: still });
+  app.sendPad();
+  assert.deepEqual(pads(socket).at(-1).a, [0, -1, 0], 'the readings keep their meaning mid-swing');
+  app.tick(600); [...app.timers.values()].at(-1)();
+  assert.deepEqual([app.$('controller').dataset.shape, frame.dataset.turn], ['landscape', '0'], 'once still, the controller follows the screen');
+});
+
+test('on an iPad the controller is drawn larger and the page says iPad', async () => {
+  const app = await remote({ userAgent: IPAD, maxTouchPoints: 5, size: [1180, 820], angle: 90 });
+  assert.equal(app.$('controller').style['--scale'], '1.475');
+  assert.equal(app.$('controller').dataset.shape, 'landscape');
+  assert.equal(app.deviceWords.length, 3);
+  assert.ok(app.deviceWords.every(el => el.textContent === 'iPad'), 'the join page and the wheel hint name the iPad');
+  const socket = app.join();
+  socket.onmessage({ data: JSON.stringify({ type: 'kicked' }) });
+  assert.equal(app.$('remote-status').textContent, 'The console removed this iPad. Join again to play.');
+  const http = await remote({ secure: false, userAgent: IPAD, maxTouchPoints: 5 }); http.join();
+  assert.equal(http.$('sensor-status').textContent, 'Motion is off until this iPad trusts the PC.');
 });
 
 test('the wheel\'s pad is the remote\'s pad turned on its side', () => {

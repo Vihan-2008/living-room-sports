@@ -66,6 +66,9 @@ function start(index) {
   $('result').textContent = ''; $('action').disabled = false; renderScores();
 }
 function home() { clearTimeout(advanceTimer); game = null; race = null; sportMatch = null; charging = false; block = false; $('menu').hidden = false; $('game').hidden = true; }
+// Home in a game returns to this channel list; Home on the list goes back to the Wii Menu,
+// like the HOME button on a Wii.
+function wiiMenu() { location.href = '/'; }
 function renderScores() {
   if (race) {
     $('round').textContent = race.finished ? 'Race complete' : race.time < 0 ? 'Get ready…' : 'Three-lap race';
@@ -130,6 +133,7 @@ function input(m) {
   if ($('pair-dialog').open) { if (m.button === 'home' && m.pressed) $('pair-dialog').close(); return; }
   if (!game) {
     if (!m.pressed) return;
+    if (m.button === 'home') return wiiMenu();
     if (m.button === 'left' || m.button === 'minus') select(selected - 1);
     if (m.button === 'right' || m.button === 'plus') select(selected + 1);
     if (m.button === 'a' || m.button === 'two') start(selected);
@@ -165,6 +169,7 @@ for (const type of ['keydown', 'keyup']) document.addEventListener(type, e => {
   e.preventDefault(); input({ slot: 0, button, pressed: type === 'keydown' });
 });
 $('action').onclick = () => play(); $('home').onclick = home; $('restart').onclick = () => start(selected);
+$('wii-menu').onclick = wiiMenu;
 $('course').onchange = () => { if (race) start(selected); };
 function keyboardRacer() {
   const active = race?.racers.filter(p => !p.bot && p.finishTime === null) || [];

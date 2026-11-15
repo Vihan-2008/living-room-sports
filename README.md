@@ -95,15 +95,17 @@ The console writes these layouts into Dolphin for each game and puts Dolphin's o
 
 ## Phones
 
-Phones need the same Wi-Fi as the PC; guest networks that keep devices apart will not work. Open **Connect controllers** (the controller button in the bottom-right corner) and scan the code with each phone's camera. Up to four phones join. Each takes the next free player number, and a phone that drops out gets its number back when it returns.
+Phones and iPads need the same Wi-Fi as the PC; guest networks that keep devices apart will not work. Open **Connect controllers** (the controller button in the bottom-right corner) and scan the code with each one's camera. Up to four join. Each takes the next free player number, and a phone that drops out gets its number back when it returns.
 
 The phone shows a Wii Remote: pointer, D-pad, A, B, −, Home, +, 1 and 2. In a sport that needs a Nunchuk it adds C, Z and a stick. In Mario Kart Wii it turns into a wheel. The **⋯** button shows the menu path for the running game, recentres the pointer, quits the game (tap twice), or leaves.
+
+The controller follows the screen. Upright, the remote stands up. In landscape it lies across the screen with the D-pad under your left thumb and A and B under your right, and the Nunchuk sits to its left. Either way, **the top edge of the screen is the end you point at the TV**. The wheel is always wide, so on an upright screen it is drawn across and you turn the phone to hold it. The layout only changes once the phone has been still for a moment, so a swing that tips the screen does not rearrange the buttons mid-game. On an iPad everything is drawn larger, and the iPad follows the same motion steps as an iPhone.
 
 **Motion** needs one step per phone. Phones only share motion sensors with secure pages, so each phone trusts the PC once:
 
 1. When a phone first joins, it says **Motion is off until this phone trusts the PC** and offers **Turn on motion**.
-2. That page has steps for iPhone and Android. It downloads the PC's certificate and walks through installing and trusting it, then checks that it worked.
-3. After that, scanning the code goes straight to the secure controller with motion on. iPhones still ask for permission once with a tap, because Safari requires one.
+2. That page has steps for iPhone or iPad, and for Android. It downloads the PC's certificate and walks through installing and trusting it, then checks that it worked.
+3. After that, scanning the code goes straight to the secure controller with motion on. iPhones and iPads still ask for permission once with a tap, because Safari requires one.
 
 The PC creates the certificate itself. It is limited to private network addresses, so it cannot be used to pose as a website on the internet. Buttons work without it. If Windows asks whether Node.js may use the network, allow **private networks**.
 
@@ -137,7 +139,7 @@ The **Living Room Sports** channel opens the original arcade. It runs in the win
 - **Comet Ballpark (baseball):** three short batting innings.
 - **Seabreeze Kart:** up to four phones race at once on three courses, with drift boosts and items (Boost, Shield, Spark). CPU racers fill the empty places.
 
-On a phone, point to aim, hold B to charge and release to shoot, and shake or press 1 to recentre. On the keyboard, use the arrows to aim, A or Space to play, B to charge or block, and Escape or Home to return. Bowling, golf and baseball take turns at frame, hole or inning boundaries. Tennis and boxing go shot by shot between the two sides. Karts all race at once.
+On a phone, point to aim, hold B to charge and release to shoot, and shake or press 1 to recentre. On the keyboard, use the arrows to aim, A or Space to play, B to charge or block, and Escape or Home to return. In a game, Home goes back to the arcade's channels; there, Home or the **Wii Menu** button at the bottom goes back to the Wii Menu. Bowling, golf and baseball take turns at frame, hole or inning boundaries. Tennis and boxing go shot by shot between the two sides. Karts all race at once.
 
 ## Building and tests
 
@@ -158,7 +160,7 @@ JARVIS runs `python check.py`, which runs the same Node tests. They cover:
 - writing and restoring Dolphin's controller settings;
 - how each kind of exit is reported;
 - the channel catalogue and the phone's game guide;
-- the phone controller page, run in a fake browser: motion maths, iPhone calibration, layouts, multi-touch and reconnecting;
+- the phone controller page, run in a fake browser: motion maths, iPhone calibration, layouts, following the screen into landscape, iPad sizing, multi-touch and reconnecting;
 - the phone setup page and certificate download;
 - the launcher: options, start-up, `--focus`, closing the Wii Menu during a game, and the portable build running with its own Node.js;
 - the arcade's rules and pairing.
