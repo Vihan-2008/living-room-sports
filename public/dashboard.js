@@ -22,7 +22,7 @@ function connect() {
     if (msg.type === 'roster') {
       const activeRemoteLost = sportMatch && players.some(p => p.slot === match[turn].slot && p.connected) && !msg.players.some(p => p.slot === match[turn].slot && p.connected);
       players = msg.players;
-      if (race) for (const p of race.racers) if (p.slot > 0 && !players.some(q => q.slot === p.slot && q.connected)) raceInput(race, p.slot, { cancel: true });
+      if (race) for (const p of race.racers) if (!p.bot && p.slot > 0 && !players.some(q => q.slot === p.slot && q.connected)) raceInput(race, p.slot, { cancel: true });
       if (activeRemoteLost) releaseSportsControls();
       renderPlayers(); if (game) renderScores();
     }
@@ -172,9 +172,7 @@ function keyboardRacer() {
   return active.find(p => p.slot === 0) || active.find(p => !players.some(q => q.slot === p.slot && q.connected)) || active[0];
 }
 function releaseSportsControls() { charging = false; block = false; }
-window.addEventListener('blur', () => {
-  input({ slot: 0, cancel: true });
-});
+window.addEventListener('blur', () => input({ slot: 0, cancel: true }));
 document.addEventListener('visibilitychange', () => { if (document.hidden) input({ slot: 0, cancel: true }); });
 for (const id of ['pair', 'pair-bottom']) $(id).onclick = () => {
   releaseSportsControls();
