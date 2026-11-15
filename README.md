@@ -2,6 +2,14 @@
 
 A Wii-inspired living room dashboard, four phone remotes, five original sports games, and a simultaneous kart-racing channel. Plain HTML, CSS and JavaScript; a dependency-free Node HTTP/WebSocket server. Everything is served locally, with no accounts or external assets.
 
+## Open it like an app (Windows)
+
+Install Node.js 22 or newer if needed, then double-click **Create Shortcut.cmd** in this folder once (or run `npm run shortcut`). It builds `dist\LivingRoomSports.exe` with the C# compiler built into Windows and adds a **Living Room Sports** shortcut to the Desktop and the Start menu. Right-click the Start menu entry to pin it to Start or the taskbar.
+
+Opening the shortcut starts the game server with no console window and opens the dashboard in its own maximized window (Microsoft Edge, or Chrome if Edge is missing), without tabs or an address bar. Press **F11** for full screen on a TV. Closing the window stops the server, which disconnects the phones. Opening the shortcut again while the game is open brings its window to the front. If the server is already running from `npm start`, the shortcut uses it and leaves it running.
+
+The window uses its own browser profile in `%LOCALAPPDATA%\LivingRoomSports`, separate from your normal browser. If something goes wrong, the launcher shows a message; details are in `%LOCALAPPDATA%\LivingRoomSports\launcher.log`. Run **Create Shortcut.cmd** again after moving the project folder. To remove the shortcuts, delete them from the Desktop and Start menu, then delete the `dist` folder.
+
 ## Run on this PC
 
 Install Node.js 22 or newer if needed. In this project folder run:
