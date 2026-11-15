@@ -12,6 +12,7 @@ export function createRace(players, course = 0) {
 export function raceInput(race, slot, message) {
   const p = race.racers.find(p => p.slot === slot && !p.bot);
   if (!p) return;
+  if (message.cancel === true) { p.controls = {}; p.drift = 0; return; }
   if (message.pointing && Number.isFinite(message.x)) p.controls.tilt = clamp(message.x, -1, 1);
   if (message.shake || (message.button === 'one' && message.pressed)) p.controls.tilt = 0;
   if (message.button) p.controls[message.button] = !!message.pressed;

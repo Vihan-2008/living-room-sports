@@ -14,7 +14,7 @@ function connect() {
   socket.onopen = () => { socket.send(JSON.stringify({ type: 'host' })); $('connection').textContent = 'Room online'; };
   socket.onclose = () => {
     releaseSportsControls();
-    if (race) for (const p of race.racers) p.controls = {};
+    if (race) for (const p of race.racers) if (!p.bot) raceInput(race, p.slot, { cancel: true });
     $('connection').textContent = 'Reconnecting…'; setTimeout(connect, 1500);
   };
   socket.onmessage = e => {
@@ -22,7 +22,7 @@ function connect() {
     if (msg.type === 'roster') {
       const activeRemoteLost = sportMatch && players.some(p => p.slot === match[turn].slot && p.connected) && !msg.players.some(p => p.slot === match[turn].slot && p.connected);
       players = msg.players;
-      if (race) for (const p of race.racers) if (p.slot > 0 && !players.some(q => q.slot === p.slot && q.connected)) p.controls = {};
+      if (race) for (const p of race.racers) if (p.slot > 0 && !players.some(q => q.slot === p.slot && q.connected)) raceInput(race, p.slot, { cancel: true });
       if (activeRemoteLost) releaseSportsControls();
       renderPlayers(); if (game) renderScores();
     }
@@ -118,6 +118,16 @@ function play(strength) {
   }, 2000);
 }
 function input(m) {
+  // Cancellation must work even while a dialog or shot animation owns input.
+  if (m.cancel === true) {
+    if (race) {
+      const p = m.slot === 0 ? keyboardRacer() : race.racers.find(p => p.slot === m.slot && !p.bot);
+      if (p) raceInput(race, p.slot, m);
+    } else if (game && (m.slot === match[turn].slot || m.slot === 0)) {
+      releaseSportsControls();
+    }
+    return;
+  }
   if ($('pair-dialog').open) { if (m.button === 'home' && m.pressed) $('pair-dialog').close(); return; }
   if (!game) {
     if (!m.pressed) return;
@@ -163,12 +173,12 @@ function keyboardRacer() {
 }
 function releaseSportsControls() { charging = false; block = false; }
 window.addEventListener('blur', () => {
-  releaseSportsControls();
-  if (race) { const p = keyboardRacer(); if (p) p.controls = {}; }
+  input({ slot: 0, cancel: true });
 });
+document.addEventListener('visibilitychange', () => { if (document.hidden) input({ slot: 0, cancel: true }); });
 for (const id of ['pair', 'pair-bottom']) $(id).onclick = () => {
   releaseSportsControls();
-  if (race) for (const p of race.racers) p.controls = {};
+  if (race) for (const p of race.racers) if (!p.bot) raceInput(race, p.slot, { cancel: true });
   $('pair-dialog').showModal();
 };
 $('close-pair').onclick = () => $('pair-dialog').close();

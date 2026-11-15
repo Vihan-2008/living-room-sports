@@ -69,6 +69,23 @@ test('rapid button presses and releases survive sensor throttling', async t => {
   assert.equal((await host.get('input')).pressed, true);
   const release = await host.get('input'); assert.equal(release.button, 'b'); assert.equal(release.pressed, false); assert.equal(release.swing, .8);
 });
+test('cancellation bypasses sensor throttling, uses the authenticated slot and precedes disconnect roster', async t => {
+  const app = await fixture(t), host = await client(app.ws), phone = await client(app.ws);
+  host.send({ type: 'host' }); await host.get('roster');
+  phone.send({ type: 'join', code: app.code }); await phone.get('joined'); await host.get('roster');
+  phone.send({ type: 'input', pointing: true, x: .5 });
+  phone.send({ type: 'input', cancel: true, slot: 4 });
+  assert.equal((await host.get('input')).pointing, true);
+  const cancelled = await host.get('input');
+  assert.equal(cancelled.cancel, true); assert.equal(cancelled.slot, 1);
+  phone.send({ type: 'input', button: 'b', pressed: true });
+  assert.equal((await host.get('input')).pressed, true);
+  phone.ws.close();
+  const disconnected = await host.get('input');
+  assert.equal(disconnected.cancel, true); assert.equal(disconnected.slot, 1);
+  assert.equal((await host.get('roster')).players[0].connected, false);
+});
+
 test('fragmented TCP delivery works; unmasked WebSocket frames are disconnected', async t => {
   const app = await fixture(t), socket = net.connect(app.server.address().port, '127.0.0.1');
   t.after(() => socket.destroy()); await once(socket, 'connect');

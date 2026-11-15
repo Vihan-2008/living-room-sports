@@ -194,6 +194,64 @@ test('pairing pauses the race and clears held controls; course select retains ke
   app.handlers.keydown({ key: 'ArrowRight', target: { matches: selector => selector.includes('select') }, preventDefault() { assert.fail('Native select input intercepted'); } });
   app.run('draw(1100);'); assert.ok(app.run('race.time') > 1);
 });
+test('sports cancellation clears charge and block before modal handling without taking a shot', async () => {
+  const app = await dashboard();
+  app.run("players = [{slot: 1, name: 'Player 1', connected: true}]; start(sports.findIndex(s => s.id === 'bowling')); input({slot: 1, button: 'b', pressed: true});");
+  assert.equal(app.run('charging && block'), true);
+  app.run('input({slot: 2, cancel: true})');
+  assert.equal(app.run('charging && block'), true);
+  app.elements.get('pair-dialog').open = true;
+  app.run('input({slot: 1, cancel: true})');
+  assert.equal(app.run('charging || block || busy'), false);
+  app.elements.get('pair-dialog').close();
+  app.run("input({slot: 1, button: 'b', pressed: false})");
+  assert.equal(app.run('match[0].frames.flat().length'), 0);
+  for (const reason of ['blur', 'hidden', 'disconnect']) {
+    app.run("input({slot: 0, button: 'b', pressed: true})");
+    assert.equal(app.run('charging && block'), true);
+    if (reason === 'blur') app.handlers.blur();
+    if (reason === 'hidden') { app.run('document.hidden = true'); app.handlers.visibilitychange(); }
+    if (reason === 'disconnect') app.run('socket.onclose()');
+    assert.equal(app.run('charging || block || busy'), false, reason);
+  }
+  app.run("input({slot: 1, button: 'b', pressed: true}); input({slot: 1, button: 'b', pressed: false})");
+  assert.equal(app.run('busy'), true);
+  assert.equal(app.run('match[0].frames.flat().length'), 1);
+});
+
+test('kart cancellation clears only the affected racer including under a modal and discards drift', async () => {
+  const app = await dashboard();
+  app.run(`players = ${JSON.stringify(players(2).map(p => ({ ...p, connected: true })))}; start(0); race.time = 1;`);
+  app.run("input({slot: 1, button: 'b', pressed: true}); input({slot: 2, button: 'right', pressed: true}); race.racers[0].drift = 2;");
+  app.elements.get('pair-dialog').open = true;
+  app.run('input({slot: 1, cancel: true})');
+  assert.equal(app.run('Object.keys(race.racers[0].controls).length'), 0);
+  assert.equal(app.run('race.racers[0].drift'), 0);
+  assert.equal(app.run('race.racers[1].controls.right'), true);
+  app.elements.get('pair-dialog').close(); app.run('stepRace(race, .05)');
+  assert.equal(app.run('race.racers[0].boost'), 0);
+  app.run('socket.onclose()');
+  assert.equal(app.run('race.racers.filter(p => !p.bot).every(p => Object.keys(p.controls).length === 0)'), true);
+});
+
+test('pairing and connection interruptions discard stored drift without awarding a boost', async () => {
+  for (const reason of ['pair', 'pair-bottom', 'roster', 'disconnect', 'blur', 'hidden']) {
+    const app = await dashboard();
+    app.run(`players = ${JSON.stringify(players(2).map(p => ({ ...p, connected: true })))}; start(0); race.time = 1;
+      input({slot: 1, button: 'b', pressed: true}); input({slot: 1, button: 'right', pressed: true}); race.racers[0].drift = 1.2;`);
+    if (reason === 'pair' || reason === 'pair-bottom') app.elements.get(reason).onclick();
+    if (reason === 'roster') app.run(`socket.onmessage({data: JSON.stringify({type: 'roster', players: players.map(p => ({...p, connected: p.slot !== 1}))})});`);
+    if (reason === 'disconnect') app.run('socket.onclose()');
+    if (reason === 'blur') app.handlers.blur();
+    if (reason === 'hidden') { app.run('document.hidden = true'); app.handlers.visibilitychange(); }
+    assert.equal(app.run('Object.keys(race.racers[0].controls).length'), 0, reason);
+    assert.equal(app.run('race.racers[0].drift'), 0, reason);
+    app.elements.get('pair-dialog').close();
+    app.run('stepRace(race, .05)');
+    assert.equal(app.run('race.racers[0].boost'), 0, reason);
+  }
+});
+
 test('solo tennis and boxing results correctly name the CPU winner after losses', async () => {
   const app = await dashboard();
   // Fix scoring to misses to isolate result UI from the moving timing window.

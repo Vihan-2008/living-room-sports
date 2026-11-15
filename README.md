@@ -32,7 +32,7 @@ Device capabilities vary. The browser exposes orientation and acceleration, not 
 
 The elongated white remote has a round D-pad housing, A, minus, Home, plus, 1 and 2 buttons, four player lights, and a labelled underside B-trigger panel (accessible on the front of the phone screen).
 
-Buttons support simultaneous touches: hold a direction and B together, or keep a button held with either of two fingers. Switching away from the remote releases held buttons, clears pending swing data and centres aim. Motion input pauses while the page is hidden or unfocused and resumes with a fresh pointing centre when you return. Leaving the room releases controls before disconnecting; reconnecting starts with no buttons held.
+Buttons support simultaneous touches: hold a direction and B together, or keep a button held with either of two fingers. Interrupted touches, lost pointer capture, switching away and leaving the room cancel held controls without firing a shot, clear pending swing data and centre aim. Motion input pauses while the page is hidden or unfocused and resumes with a fresh pointing centre when you return. Reconnecting starts with no buttons held. An intentional B release still shoots. Kart cancellation discards steering, braking and stored drift without awarding a boost.
 
 Sports cancel held charge and block when the dashboard loses focus, opens pairing, loses its connection, or the active remote disconnects. Releasing B afterward does not fire the cancelled shot; press B again to start a fresh charge. A lost dashboard connection also releases all racers' held controls.
 
