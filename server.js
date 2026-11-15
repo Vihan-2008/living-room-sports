@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { networkInterfaces } from 'node:os';
 import { createHash, randomInt } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { qrSvg } from './qr.js';
 
 const root = new URL('./public/', import.meta.url);
 const assets = new Map(['index.html', 'remote.html', 'style.css', 'dashboard.js', 'remote.js', 'games.js', 'kart.js', 'race-view.js', 'sports-match.js'].map(name => ['/' + name, name]));
@@ -42,6 +43,15 @@ export function createApp() {
     const url = new URL(req.url, 'http://localhost');
     res.setHeader('Cache-Control', 'no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (url.pathname === '/qr') {
+      try {
+        const target = new URL(url.searchParams.get('url'));
+        if (!['http:', 'https:'].includes(target.protocol) || target.pathname !== '/remote' || target.searchParams.get('code') !== code) throw new Error('Invalid pairing URL');
+        const svg = qrSvg(target.href);
+        res.setHeader('Content-Type', 'image/svg+xml');
+        return res.end(svg);
+      } catch { res.writeHead(400); return res.end('Invalid or oversized pairing URL'); }
+    }
     if (url.pathname === '/config') {
       const port = server.address().port;
       const addresses = phoneAddresses(networkInterfaces(), port, code);

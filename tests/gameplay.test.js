@@ -174,6 +174,12 @@ test('pairing preserves the reachable dashboard origin including HTTPS and dedup
     const app = await dashboard({ href: `${origin}/`, config: { code: '123456', addresses: [link, 'http://172.20.0.1:3000/remote?code=123456'] } });
     assert.deepEqual(app.elements.get('join-links').children.map(a => a.href), [link, 'http://172.20.0.1:3000/remote?code=123456']);
     assert.equal(app.elements.get('room-code').textContent, '123456');
+    const [qr, label, fallback] = app.elements.get('join-links').children[0].children;
+    assert.equal(qr.src, `/qr?url=${encodeURIComponent(link)}`);
+    assert.equal(qr.width, 270); assert.equal(qr.height, 270);
+    assert.match(qr.alt, /four players/); assert.match(label.textContent, /4 players/);
+    assert.equal(fallback.textContent, link);
+    qr.onerror(); assert.equal(qr.hidden, true); assert.match(label.textContent, /QR unavailable/);
   }
 });
 

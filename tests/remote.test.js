@@ -4,7 +4,7 @@ import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 
 // Exercise the actual phone event handlers without browser or network dependencies.
-async function remote() {
+async function remote({ search = '?code=123456', secure = true, motionType = {}, orientationType = {} } = {}) {
   const html = await readFile(new URL('../public/remote.html', import.meta.url), 'utf8');
   const source = await readFile(new URL('../public/remote.js', import.meta.url), 'utf8');
   const elements = new Map(), handlers = {}, sockets = [], timers = new Map();
@@ -25,8 +25,8 @@ async function remote() {
     querySelectorAll: selector => selector === '[data-button]' ? buttons : selector === '.held' ? buttons.filter(b => b.classList.contains('held')) : [],
     addEventListener: (name, fn) => { handlers[name] = fn; } };
   const context = vm.createContext({ document,
-    window: { isSecureContext: true, DeviceMotionEvent: {}, DeviceOrientationEvent: {}, addEventListener: (name, fn) => { handlers[name] = fn; } },
-    location: { search: '?code=123456', protocol: 'http:', host: 'localhost:3000' }, URLSearchParams,
+    window: { isSecureContext: secure, DeviceMotionEvent: motionType, DeviceOrientationEvent: orientationType, addEventListener: (name, fn) => { handlers[name] = fn; } },
+    location: { search, protocol: secure ? 'https:' : 'http:', host: 'localhost:3000' }, URLSearchParams,
     navigator: { vibrate() {} }, performance: { now: () => now },
     WebSocket: class {
       static OPEN = 1; static CONNECTING = 0;
@@ -38,7 +38,7 @@ async function remote() {
   });
   vm.runInContext(source, context);
   function join() {
-    elements.get('join-form').onsubmit({ preventDefault() {} });
+    if (sockets.at(-1)?.readyState !== 0) elements.get('join-form').onsubmit({ preventDefault() {} });
     const socket = sockets.at(-1); socket.readyState = 1; socket.onopen();
     socket.onmessage({ data: JSON.stringify({ type: 'joined', slot: 1, color: '#149ed4' }) });
     return socket;
@@ -116,12 +116,73 @@ test('leave releases controls before closing and rejoining starts with fresh poi
 
 test('disconnect clears held pointers and reconnect allows the same button again', async () => {
   const app = await remote(), socket = app.join();
+  await new Promise(resolve => setImmediate(resolve));
   app.pointer('right', 'down'); socket.readyState = 3; socket.onclose();
   assert.ok(app.buttons.every(b => !b.classList.contains('held')));
-  assert.equal(app.timers.size, 1);
-  const reconnect = [...app.timers.values()][0]; reconnect();
+  assert.equal(app.timers.size, 2); // Sensor notice plus reconnection.
+  const reconnect = [...app.timers.values()].at(-1); reconnect();
   const next = app.sockets.at(-1); next.readyState = 1; next.onopen();
   next.onmessage({ data: JSON.stringify({ type: 'joined', slot: 2, color: '#ef665e' }) });
   app.pointer('right', 'up'); app.pointer('right', 'down'); app.pointer('right', 'up');
   assert.deepEqual(next.sent.filter(m => m.button).map(m => m.pressed), [true, false]);
+});
+
+test('scanned room autojoins without submitting a name and starts motion without a tap', async () => {
+  const app = await remote();
+  assert.equal(app.sockets.length, 1);
+  assert.equal(app.elements.get('join-form').hidden, true);
+  const socket = app.join();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(socket.sent[0], { type: 'join', name: '', code: '123456' });
+  assert.equal(app.elements.get('enable-motion').hidden, true);
+  app.sensors(); app.tick();
+  app.handlers.deviceorientation({ alpha: 107.5, beta: 42.5 });
+  assert.equal(socket.sent.at(-1).x, .5);
+  assert.equal(socket.sent.at(-1).y, .5);
+  assert.ok(socket.sent.some(m => m.swing > 0));
+});
+
+test('missing or malformed room URLs keep manual pairing available', async () => {
+  for (const search of ['', '?code=bad', '?code=12345', '?code=1234567']) {
+    const app = await remote({ search });
+    assert.equal(app.sockets.length, 0);
+    assert.equal(app.elements.get('code').value, '');
+    app.join(); assert.equal(app.sockets.length, 1);
+  }
+});
+
+test('iOS autojoins but requests both permissions only from the Allow motion tap', async () => {
+  const calls = [];
+  const app = await remote({ motionType: { requestPermission() { calls.push('motion'); return Promise.resolve('granted'); } },
+    orientationType: { requestPermission() { calls.push('orientation'); return Promise.resolve('granted'); } } });
+  const socket = app.join();
+  assert.deepEqual(calls, []);
+  assert.equal(app.elements.get('enable-motion').hidden, false);
+  const pending = app.elements.get('enable-motion').onclick();
+  assert.deepEqual(calls, ['motion', 'orientation']); // Both before any awaited work.
+  await pending;
+  app.sensors(); assert.ok(socket.sent.some(m => m.swing));
+  await app.elements.get('enable-motion').onclick();
+  assert.equal(calls.length, 2);
+});
+
+test('denied and rejected permissions leave buttons usable and offer retry', async () => {
+  for (const requestPermission of [() => Promise.resolve('denied'), () => Promise.reject(new Error('blocked'))]) {
+    const app = await remote({ motionType: { requestPermission }, orientationType: {} });
+    const socket = app.join();
+    await app.elements.get('enable-motion').onclick();
+    assert.equal(app.handlers.deviceorientation, undefined);
+    assert.equal(app.elements.get('enable-motion').hidden, false);
+    app.pointer('a', 'down'); assert.equal(socket.sent.at(-1).button, 'a');
+  }
+});
+
+test('HTTP and sensorless devices join with working buttons and truthful motion status', async () => {
+  for (const options of [{ secure: false }, { motionType: null, orientationType: null }]) {
+    const app = await remote(options), socket = app.join();
+    assert.equal(app.elements.get('enable-motion').hidden, true);
+    assert.match(app.elements.get('sensor-status').textContent, /unavailable/);
+    assert.equal(app.handlers.deviceorientation, undefined);
+    app.pointer('a', 'down'); assert.equal(socket.sent.at(-1).button, 'a');
+  }
 });

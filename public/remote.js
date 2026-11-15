@@ -1,11 +1,11 @@
 const $ = id => document.getElementById(id);
-let socket, slot = null, joined = false, reconnectTimer, desired = false, motionEnabled = false;
+let socket, slot = null, joined = false, reconnectTimer, desired = false, motionEnabled = false, motionPending = false;
 let x = 0, y = 0, baseAlpha = null, baseBeta = null, lastSend = 0, lastSwing = 0, lastShake = 0, swing = 0;
 const held = new Set();
 const pointers = new Map();
 let suspended = document.hidden;
 const codeFromLink = new URLSearchParams(location.search).get('code');
-if (codeFromLink) $('code').value = codeFromLink;
+if (/^\d{6}$/.test(codeFromLink || '')) $('code').value = codeFromLink;
 function send(data, force = false) {
   if (!joined || socket?.readyState !== WebSocket.OPEN || (!force && performance.now() - lastSend < 32)) return;
   lastSend = performance.now(); socket.send(JSON.stringify({ type: 'input', x, y, ...data }));
@@ -21,6 +21,7 @@ function connect() {
       document.documentElement.style.setProperty('--player', msg.color); $('slot-label').textContent = `P${slot}`;
       document.querySelectorAll('.leds i').forEach((el, i) => el.classList.toggle('active', i === slot - 1));
       $('remote-status').textContent = `Connected as Player ${slot}. Ready to play!`;
+      enableMotion();
     }
     if (msg.type === 'error') { desired = false; $('remote-status').textContent = msg.message; $('join-form').hidden = false; $('remote-controls').hidden = true; socket.close(); }
     if (msg.type === 'rumble') navigator.vibrate?.(msg.duration);
@@ -31,7 +32,7 @@ function connect() {
   };
   socket.onerror = () => { $('remote-status').textContent = 'Cannot reach the room. Check Wi-Fi and keep the PC dashboard running.'; };
 }
-$('join-form').onsubmit = e => { e.preventDefault(); if (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return; desired = true; connect(); };
+$('join-form').onsubmit = e => { e.preventDefault(); if (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return; enableMotion(true); desired = true; connect(); };
 $('leave').onclick = () => { desired = false; clearTimeout(reconnectTimer); releaseAll(); socket?.close(); joined = false; $('join-form').hidden = false; $('remote-controls').hidden = true; $('remote-status').textContent = 'You left the room.'; };
 function recenter() { baseAlpha = null; baseBeta = null; x = 0; y = 0; send({ shake: true }, true); }
 $('recenter').onclick = recenter;
@@ -66,22 +67,33 @@ for (const button of document.querySelectorAll('[data-button]')) {
 window.addEventListener('blur', () => { suspended = true; releaseAll(); });
 window.addEventListener('focus', () => { suspended = document.hidden; });
 document.addEventListener('visibilitychange', () => { suspended = document.hidden; if (suspended) releaseAll(); });
-$('enable-motion').onclick = async () => {
-  if (motionEnabled) return;
-  if (!window.isSecureContext) { $('sensor-status').textContent = 'Motion needs trusted HTTPS on this phone. Use the buttons now; see the PC README for sensor setup.'; return; }
+$('enable-motion').onclick = () => enableMotion(true);
+async function enableMotion(userGesture = false) {
+  if (motionEnabled || motionPending) return;
+  const button = $('enable-motion');
+  button.hidden = true;
+  if (!window.isSecureContext) { $('sensor-status').textContent = 'Motion unavailable over HTTP. Buttons are ready.'; return; }
+  const types = [window.DeviceMotionEvent, window.DeviceOrientationEvent];
+  if (!types.some(Boolean)) { $('sensor-status').textContent = 'Motion unavailable on this device. Buttons are ready.'; return; }
+  if (!userGesture && types.some(type => typeof type?.requestPermission === 'function')) {
+    button.hidden = false;
+    $('sensor-status').textContent = 'Your browser needs permission for motion.';
+    return;
+  }
+  motionPending = true;
   try {
     // Request both permissions directly from this user gesture (required by iOS).
-    const requests = [window.DeviceMotionEvent, window.DeviceOrientationEvent].map(type => typeof type?.requestPermission === 'function' ? type.requestPermission() : Promise.resolve('granted'));
+    const requests = types.map(type => typeof type?.requestPermission === 'function' ? type.requestPermission() : Promise.resolve('granted'));
     const permissions = await Promise.all(requests);
-    if (permissions.some(value => value !== 'granted')) throw new Error('Permission denied. Allow motion in your browser settings, then try again.');
-    if (!window.DeviceMotionEvent && !window.DeviceOrientationEvent) throw new Error('This browser has no motion sensors. Use the remote buttons.');
+    if (permissions.some(value => value !== 'granted')) throw new Error('Motion permission declined. Buttons are ready.');
     motionEnabled = true;
-    $('sensor-status').textContent = 'Waiting for sensor data. Hold upright and tap Recenter.';
+    $('sensor-status').textContent = 'Connecting motion…';
     window.addEventListener('deviceorientation', orientation);
     window.addEventListener('devicemotion', motion);
-    setTimeout(() => { if (motionEnabled && baseAlpha === null) $('sensor-status').textContent = 'No orientation data received. Try another browser or use the buttons.'; }, 5000);
-  } catch (error) { $('sensor-status').textContent = error.message; }
-};
+    setTimeout(() => { if (motionEnabled && baseAlpha === null) $('sensor-status').textContent = 'No orientation data received. Buttons are ready.'; }, 5000);
+  } catch { button.hidden = false; $('sensor-status').textContent = 'Motion permission unavailable. Buttons are ready.'; }
+  finally { motionPending = false; }
+}
 function orientation(e) {
   if (!joined || suspended || document.hidden) return;
   if (!Number.isFinite(e.alpha) || !Number.isFinite(e.beta)) return;
@@ -107,4 +119,10 @@ function motion(e) {
   if (magnitude > threshold + 25 && now - lastShake > 1800 && !held.has('b')) {
     lastShake = now; recenter();
   }
+}
+// A scanned room URL is sufficient to join; names and codes need no typing.
+if (/^\d{6}$/.test(codeFromLink || '')) {
+  $('join-form').hidden = true;
+  $('remote-status').textContent = 'Joining the game…';
+  desired = true; connect();
 }
