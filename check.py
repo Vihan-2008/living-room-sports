@@ -10,7 +10,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 
 # The commands that test this project, each a list (the program and its words). Add the project's own here.
-TESTS: list[list[str]] = [["node", "--test", "tests/app.test.js", "tests/gameplay.test.js", "tests/remote.test.js", "tests/qr.test.js"]]
+TESTS: list[list[str]] = [["node", "--test", "tests/app.test.js", "tests/gameplay.test.js", "tests/remote.test.js", "tests/qr.test.js", "tests/launcher.test.js"]]
 
 
 def main() -> int:

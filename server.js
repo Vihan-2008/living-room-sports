@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { qrSvg } from './qr.js';
 
 const root = new URL('./public/', import.meta.url);
-const assets = new Map(['index.html', 'remote.html', 'style.css', 'dashboard.js', 'remote.js', 'games.js', 'kart.js', 'race-view.js', 'sports-match.js'].map(name => ['/' + name, name]));
+const assets = new Map(['index.html', 'remote.html', 'style.css', 'dashboard.js', 'remote.js', 'games.js', 'kart.js', 'race-view.js', 'sports-match.js', 'icon.svg'].map(name => ['/' + name, name]));
 export const colors = ['#149ed4', '#ef665e', '#61b968', '#e1ab23'];
 export function phoneAddresses(interfaces, port, code) {
   const candidates = [];
@@ -61,7 +61,7 @@ export function createApp() {
     const name = assets.get(url.pathname === '/' ? '/index.html' : url.pathname === '/remote' ? '/remote.html' : url.pathname);
     if (!name) { res.writeHead(404); return res.end('Not found'); }
     try {
-      res.setHeader('Content-Type', name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html');
+      res.setHeader('Content-Type', name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.svg') ? 'image/svg+xml' : 'text/html');
       res.end(await readFile(new URL(name, root)));
     } catch { res.writeHead(500); res.end('Unable to load application'); }
   });
@@ -158,5 +158,7 @@ export function createApp() {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const app = createApp();
-  app.server.listen(3000, '0.0.0.0', () => console.log('Living Room Sports: http://localhost:3000 — open the dashboard for phone join links.'));
+  // PORT lets the desktop launcher (and its tests) pick the port; the app normally uses 3000.
+  const port = Number(process.env.PORT) || 3000;
+  app.server.listen(port, '0.0.0.0', () => console.log(`Living Room Sports: http://localhost:${port} — open the dashboard for phone join links.`));
 }
