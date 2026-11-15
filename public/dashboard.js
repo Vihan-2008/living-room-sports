@@ -183,7 +183,7 @@ for (const id of ['pair', 'pair-bottom']) $(id).onclick = () => {
 $('close-pair').onclick = () => $('pair-dialog').close();
 async function loadJoinLinks() {
   $('join-links').replaceChildren();
-  $('join-links').textContent = 'Loading phone links…';
+  $('join-links').textContent = 'Loading QR codes…';
   try {
     const response = await fetch('/config');
     if (!response.ok) throw new Error('Configuration unavailable');
@@ -194,7 +194,16 @@ async function loadJoinLinks() {
     const links = [...new Set([...(local ? [] : [`${current.origin}/remote?code=${config.code}`]), ...config.addresses])];
     $('join-links').textContent = '';
     if (!links.length) $('join-links').textContent = 'No phone-accessible network address found. Connect this PC to Wi-Fi, then close and reopen this dialog. Localhost only opens on this PC.';
-    for (const url of links) { const a = document.createElement('a'); a.href = url; a.textContent = url; a.target = '_blank'; a.rel = 'noopener'; $('join-links').append(a); }
+    for (const [i, url] of links.entries()) {
+      const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener';
+      const image = document.createElement('img'); image.src = `/qr?url=${encodeURIComponent(url)}`;
+      image.alt = `Scan to join up to four players${i ? ' (alternate network)' : ''}`;
+      image.width = 270; image.height = 270;
+      const label = document.createElement('span'); label.textContent = i ? 'Alternate network' : 'Scan to play · Up to 4 players';
+      const fallback = document.createElement('small'); fallback.textContent = url;
+      image.onerror = () => { image.hidden = true; label.textContent = 'QR unavailable. Open this phone link.'; };
+      a.append(image, label, fallback); $('join-links').append(a);
+    }
   } catch { $('join-links').textContent = 'Unable to load join links. Keep the app running, then close and reopen this dialog to retry.'; }
 }
 loadJoinLinks();

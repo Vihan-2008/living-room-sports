@@ -3,3 +3,5 @@
 /* Six channels retain the console shelf proportions. */
 @media(min-width:751px){.channel-shelf{grid-template-columns:repeat(3,minmax(0,1fr))}.channel-art{height:120px}.channel-title{padding:14px 18px}.channel-title strong{font-size:20px}}
 #course-picker{display:block;margin:0 0 20px;font-size:14px}#course{font:inherit;color:#284c60;border:1px solid #bfdae5;border-radius:10px;background:white;padding:10px;margin-left:12px}#course:focus-visible{outline:3px solid #158cbd;outline-offset:3px}
+
+#join-links a{text-align:center}#join-links img{display:block;width:270px;max-width:100%;height:auto;margin:auto;background:#fff}#join-links span,#join-links small{display:block}#join-links small{font-size:11px;margin-top:8px}#enable-motion{font-weight:bold}
