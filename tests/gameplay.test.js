@@ -135,7 +135,7 @@ test('all courses support complete races with finite results and CPU competition
 
 // Run the actual dashboard event handlers and renderer against a minimal DOM.
 // This catches wiring errors without adding a browser dependency to the local app.
-async function dashboard() {
+async function dashboard({ href = 'http://localhost:3000/', config = { code: '123456', addresses: [], local: '/remote' }, ok = true } = {}) {
   const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
   const source = await readFile(new URL('../public/dashboard.js', import.meta.url), 'utf8');
   const handlers = {}, timers = [], elements = new Map();
@@ -150,14 +150,43 @@ async function dashboard() {
   const context = vm.createContext({ sports, evaluate, timingAt, createSportsMatch, resolveShot, matchLabel, createRace, raceInput, stepRace, standings, drawRace,
     document: { getElementById: id => { assert.ok(elements.has(id), `Missing element ${id}`); return elements.get(id); }, createElement: element, querySelectorAll: () => [], addEventListener: (name, callback) => { handlers[name] = callback; } },
     window: { addEventListener: (name, callback) => { handlers[name] = callback; } },
-    location: { protocol: 'http:', host: 'localhost' },
+    location: new URL(href), URL,
     WebSocket: class { static OPEN = 1; constructor() { this.readyState = 1; } send() {} },
-    performance: { now: () => now }, fetch: async () => ({ json: async () => ({ code: '123456', addresses: [], local: '/remote' }) }),
+    performance: { now: () => now }, fetch: async () => ({ ok, json: async () => config }),
     requestAnimationFrame() {}, setInterval() {}, setTimeout: callback => { timers.push(callback); return timers.length; }, clearTimeout: id => { if (id) timers[id - 1] = null; }, console
   });
   vm.runInContext(source.replace(/^import .*;\r?\n/gm, ''), context);
+  await new Promise(resolve => setImmediate(resolve));
   return { elements, handlers, run: code => vm.runInContext(code, context), advance: () => { now += 2500; const callback = timers.findIndex(Boolean); if (callback >= 0) { const fn = timers[callback]; timers[callback] = null; fn(); } } };
 }
+
+test('pairing never offers localhost as a phone link and reports missing network addresses', async () => {
+  for (const host of ['localhost', '127.0.0.1', '[::1]', 'demo.localhost', '0.0.0.0']) {
+    const app = await dashboard({ href: `http://${host}:3000/` });
+    assert.equal(app.elements.get('join-links').children.length, 0);
+    assert.match(app.elements.get('join-links').textContent, /Connect this PC to Wi-Fi/);
+  }
+});
+
+test('pairing preserves the reachable dashboard origin including HTTPS and deduplicates LAN links', async () => {
+  for (const origin of ['https://sports.example:8443', 'http://192.168.1.40:3000']) {
+    const link = `${origin}/remote?code=123456`;
+    const app = await dashboard({ href: `${origin}/`, config: { code: '123456', addresses: [link, 'http://172.20.0.1:3000/remote?code=123456'] } });
+    assert.deepEqual(app.elements.get('join-links').children.map(a => a.href), [link, 'http://172.20.0.1:3000/remote?code=123456']);
+    assert.equal(app.elements.get('room-code').textContent, '123456');
+  }
+});
+
+test('reopening pairing refreshes addresses after a network change and handles configuration failures', async () => {
+  const config = { code: '123456', addresses: ['http://192.168.1.40:3000/remote?code=123456'] };
+  const app = await dashboard({ config });
+  config.addresses = ['http://192.168.2.50:3000/remote?code=123456'];
+  app.elements.get('pair').onclick();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(app.elements.get('join-links').children.map(a => a.href), config.addresses);
+  const failed = await dashboard({ ok: false });
+  assert.match(failed.elements.get('join-links').textContent, /reopen this dialog to retry/);
+});
 test('dashboard launches racing, routes four remotes, draws, restarts courses and returns home', async () => {
   const app = await dashboard();
   app.run(`players = ${JSON.stringify(players(4).map(p => ({ ...p, connected: true })))}; start(sports.findIndex(s => s.id === 'kart'));`);

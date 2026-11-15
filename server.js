@@ -7,6 +7,20 @@ import { fileURLToPath } from 'node:url';
 const root = new URL('./public/', import.meta.url);
 const assets = new Map(['index.html', 'remote.html', 'style.css', 'dashboard.js', 'remote.js', 'games.js', 'kart.js', 'race-view.js', 'sports-match.js'].map(name => ['/' + name, name]));
 export const colors = ['#149ed4', '#ef665e', '#61b968', '#e1ab23'];
+export function phoneAddresses(interfaces, port, code) {
+  const candidates = [];
+  for (const [name, entries] of Object.entries(interfaces)) {
+    for (const entry of entries || []) {
+      if (!['IPv4', 4].includes(entry.family) || entry.internal || /^(127\.|169\.254\.|0\.)/.test(entry.address)) continue;
+      // Prefer physical home-network adapters, keeping VPNs as alternatives.
+      const virtual = /vpn|virtual|vethernet|vmware|vbox|hyper-v|docker|wsl|tailscale|zerotier|tunnel|tap|tun\d/i.test(name);
+      const privateAddress = /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(entry.address);
+      candidates.push({ address: entry.address, rank: (virtual ? 4 : 0) + (privateAddress ? 0 : 2) });
+    }
+  }
+  candidates.sort((a, b) => a.rank - b.rank);
+  return [...new Set(candidates.map(a => `http://${a.address}:${port}/remote?code=${code}`))];
+}
 export function frame(value, opcode = 1) {
   const body = Buffer.from(typeof value === 'string' ? value : JSON.stringify(value));
   const header = Buffer.alloc(body.length < 126 ? 2 : 4);
@@ -30,7 +44,7 @@ export function createApp() {
     res.setHeader('X-Content-Type-Options', 'nosniff');
     if (url.pathname === '/config') {
       const port = server.address().port;
-      const addresses = Object.values(networkInterfaces()).flat().filter(a => a.family === 'IPv4' && !a.internal).map(a => `http://${a.address}:${port}/remote?code=${code}`);
+      const addresses = phoneAddresses(networkInterfaces(), port, code);
       res.setHeader('Content-Type', 'application/json');
       return res.end(JSON.stringify({ code, addresses, local: `http://localhost:${port}/remote?code=${code}` }));
     }
