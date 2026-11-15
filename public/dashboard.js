@@ -1,0 +1,182 @@
+import { sports, evaluate, timingAt, nextTurn } from './games.js';
+const $ = id => document.getElementById(id);
+let players = [], selected = 0, game = null, match = [], turn = 0, round = 1, finished = false;
+let aim = 0, power = .7, block = false, busy = false, charging = false, chargeStart = 0, advanceTimer;
+let shot = null, lastPlay = 0, socket;
+const canvas = $('court'), ctx = canvas.getContext('2d');
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+function connect() {
+  socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`);
+  socket.onopen = () => { socket.send(JSON.stringify({ type: 'host' })); $('connection').textContent = 'Room online'; };
+  socket.onclose = () => { $('connection').textContent = 'Reconnecting…'; setTimeout(connect, 1500); };
+  socket.onmessage = e => {
+    const msg = JSON.parse(e.data);
+    if (msg.type === 'roster') { players = msg.players; renderPlayers(); if (game) renderScores(); }
+    if (msg.type === 'error') $('connection').textContent = msg.message;
+    if (msg.type === 'input') input(msg);
+  };
+}
+function renderPlayers() {
+  $('players').replaceChildren();
+  for (const p of players) {
+    const item = document.createElement('div'); item.className = `player ${p.connected ? '' : 'off'}`; item.style.setProperty('--p', p.color);
+    const avatar = document.createElement('div'); avatar.className = 'avatar'; avatar.innerHTML = '<i></i>';
+    const info = document.createElement('div'), name = document.createElement('strong'), status = document.createElement('small');
+    name.textContent = p.connected ? p.name : `Player ${p.slot}`; status.textContent = p.connected ? `P${p.slot} · Connected` : 'Ready to join';
+    info.append(name, status); item.append(avatar, info); $('players').append(item);
+  }
+  $('player-count').textContent = `${players.filter(p => p.connected).length} remotes connected`;
+}
+function select(index) { selected = (index + sports.length) % sports.length; document.querySelectorAll('.channel').forEach((el, i) => el.classList.toggle('selected', i === selected)); }
+for (const [i, sport] of sports.entries()) {
+  const button = document.createElement('button'); button.className = 'channel'; button.style.setProperty('--art', sport.color);
+  button.innerHTML = `<div class="channel-art"><span aria-hidden="true">${sport.icon}</span></div><div class="channel-title"><strong>${sport.name}</strong><small>${sport.sport} · 1–4 players</small></div>`;
+  button.onfocus = () => select(i); button.onclick = () => start(i); $('channels').append(button);
+}
+select(0);
+function start(index) {
+  clearTimeout(advanceTimer); select(index); game = sports[index];
+  match = players.filter(p => p.connected).map(p => ({ ...p, score: 0 }));
+  if (!match.length) match = [{ slot: 0, name: 'You (keyboard)', color: '#139ed3', score: 0 }];
+  turn = 0; round = 1; finished = false; busy = false; shot = null; aim = 0; power = .7; charging = false; block = false;
+  $('menu').hidden = true; $('game').hidden = false; $('game-title').textContent = game.name; $('game-help').textContent = game.help;
+  $('result').textContent = ''; $('action').disabled = false; renderScores();
+}
+function home() { clearTimeout(advanceTimer); game = null; charging = false; block = false; $('menu').hidden = false; $('game').hidden = true; }
+function renderScores() {
+  $('round').textContent = finished ? 'Match complete' : `Round ${round} of 3 · ${game.sport}`;
+  const current = match[turn];
+  const offline = current.slot && !players.some(p => p.slot === current.slot && p.connected);
+  $('turn').textContent = finished ? 'Good game, everyone!' : `${current.name}’s turn${offline ? ' (offline: use keyboard)' : ''}`;
+  $('scores').replaceChildren();
+  for (const p of match) {
+    const row = document.createElement('p'), name = document.createElement('span'), score = document.createElement('strong');
+    name.textContent = `${p.slot ? 'P' + p.slot + ' ' : ''}${p.name}`; name.style.color = p.color; score.textContent = `${p.score} ${game.unit}`;
+    row.append(name, score); $('scores').append(row);
+  }
+}
+function play(strength) {
+  if (!game || busy || finished || performance.now() - lastPlay < 500) return;
+  lastPlay = performance.now(); busy = true; charging = false;
+  const t = timingAt(performance.now());
+  const target = game.id === 'tennis' ? Math.sin(performance.now() * .0007) * .4 : game.id === 'boxing' ? Math.sin(performance.now() * .001) * .45 : 0;
+  const result = evaluate(game.id, { aim: aim - target, power: strength ?? power, timing: t, block });
+  match[turn].score += result.score; shot = { ...result, aim, start: performance.now(), power: strength ?? power };
+  $('result').textContent = result.text; $('action').disabled = true;
+  if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'rumble', slot: match[turn].slot, duration: result.score > 0 ? 100 : 40 }));
+  renderScores();
+  advanceTimer = setTimeout(() => {
+    const next = nextTurn(match, turn, round); turn = next.turn; round = next.round; finished = next.finished;
+    busy = false; shot = null; power = .7; aim = 0; block = false;
+    if (finished) {
+      const best = Math.max(...match.map(p => p.score));
+      $('result').textContent = `${match.filter(p => p.score === best).map(p => p.name).join(' & ')} ${match.filter(p => p.score === best).length > 1 ? 'tie' : 'wins'}! ${best} ${game.unit}`;
+    } else { $('result').textContent = ''; $('action').disabled = false; }
+    renderScores();
+  }, 2000);
+}
+function input(m) {
+  if ($('pair-dialog').open) { if (m.button === 'home' && m.pressed) $('pair-dialog').close(); return; }
+  if (!game) {
+    if (!m.pressed) return;
+    if (m.button === 'left' || m.button === 'minus') select(selected - 1);
+    if (m.button === 'right' || m.button === 'plus') select(selected + 1);
+    if (m.button === 'a' || m.button === 'two') start(selected);
+    return;
+  }
+  if (m.slot !== match[turn].slot && m.slot !== 0) return;
+  if (m.button === 'home' && m.pressed) return home();
+  if (finished) { if (m.button === 'plus' && m.pressed) start(selected); return; }
+  if (busy) return;
+  if (m.pointing && Number.isFinite(m.x)) aim = m.x;
+  if (m.shake || (m.button === 'one' && m.pressed)) aim = 0;
+  if (m.button === 'left' && m.pressed) aim = clamp(aim - .12, -1, 1);
+  if (m.button === 'right' && m.pressed) aim = clamp(aim + .12, -1, 1);
+  if (m.button === 'b') {
+    block = m.pressed;
+    if (m.pressed) { charging = true; chargeStart = performance.now(); }
+    else if (charging) { charging = false; if (game.id !== 'boxing') play(m.swing > .15 ? m.swing : power); }
+  }
+  if (((m.button === 'a' || m.button === 'two') && m.pressed) || (m.swing > .28 && (game.id !== 'golf' && game.id !== 'bowling' || !charging))) play(m.swing > .28 ? m.swing : undefined);
+}
+const keys = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', a: 'a', ' ': 'a', Enter: 'a', b: 'b', Escape: 'home', Home: 'home', '1': 'one', '2': 'two', '+': 'plus', '-': 'minus' };
+for (const type of ['keydown', 'keyup']) document.addEventListener(type, e => {
+  if (e.target.matches('input') || $('pair-dialog').open) return;
+  const button = keys[e.key]; if (!button || e.repeat) return;
+  if (e.target.matches('button') && (e.key === 'Enter' || e.key === ' ')) return;
+  e.preventDefault(); input({ slot: 0, button, pressed: type === 'keydown' });
+});
+$('action').onclick = () => play(); $('home').onclick = home; $('restart').onclick = () => start(selected);
+for (const id of ['pair', 'pair-bottom']) $(id).onclick = () => $('pair-dialog').showModal();
+$('close-pair').onclick = () => $('pair-dialog').close();
+fetch('/config').then(r => r.json()).then(config => {
+  $('room-code').textContent = config.code;
+  const links = config.addresses.length ? config.addresses : [config.local];
+  for (const url of links) { const a = document.createElement('a'); a.href = url; a.textContent = url; a.target = '_blank'; a.rel = 'noopener'; $('join-links').append(a); }
+}).catch(() => { $('join-links').textContent = 'Unable to load join links. Reload the dashboard.'; });
+function clock() { const now = new Date(); $('clock').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); $('date').textContent = now.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }); }
+clock(); setInterval(clock, 1000); connect();
+
+// All sports artwork is drawn here from basic shapes; no downloaded game assets.
+function rect(x,y,w,h,color) { ctx.fillStyle=color;ctx.fillRect(x,y,w,h); }
+function circle(x,y,r,color) { ctx.fillStyle=color;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill(); }
+function line(x,y,x2,y2,color,width=3) { ctx.strokeStyle=color;ctx.lineWidth=width;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x2,y2);ctx.stroke(); }
+function polygon(points,color) { ctx.fillStyle=color;ctx.beginPath();points.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.closePath();ctx.fill(); }
+function draw(now) {
+  requestAnimationFrame(draw); if (!game) return;
+  if (!busy && !finished) power = charging ? clamp((now-chargeStart)/1400, .05, 1) : .25 + .75 * timingAt(now * .65);
+  $('power').value = power; $('timing').style.left = `${timingAt(now)*100}%`;
+  const progress = shot ? clamp((now-shot.start)/1200,0,1) : 0;
+  rect(0,0,1000,560,'#bfeafa'); circle(835,90,42,'#fff2b9');
+  for(let i=0;i<4;i++){circle(110+i*240,75+(i%2)*25,27,'#ffffffa0');circle(138+i*240,70+(i%2)*25,36,'#ffffffa0');}
+  rect(0,300,1000,260,'#89cfa4');
+  if(game.id==='bowling') {
+    rect(0,0,1000,560,'#d9eef5');rect(60,50,880,100,'#74b7d0');
+    for(let i=0;i<5;i++)circle(180+i*160,100,16,'#ffffff90');
+    polygon([[330,150],[670,150],[930,560],[70,560]],'#dfbf8d');
+    for(let i=0;i<9;i++)line(330+i*42,150,70+i*107,560,'#cfa877',2);
+    line(100,520,900,520,'#fff9',5);
+    let pin=0;for(let row=0;row<4;row++)for(let c=0;c<=row;c++){
+      const x=500+(c-row/2)*37,y=190-row*20;
+      if(!shot||progress<.8||pin++>=shot.score){rect(x-6,y-15,12,28,'#fff');circle(x,y-17,7,'#fff');rect(x-6,y-8,12,4,'#f16f69');}
+    }
+    const p=progress;circle(500+(shot?shot.aim:aim)*180*p,495-p*295,25-p*13,'#355d91');
+    circle(493+(shot?shot.aim:aim)*180*p,488-p*295,4,'#a0c4ed');
+  } else if(game.id==='tennis') {
+    polygon([[270,180],[730,180],[940,560],[60,560]],'#4bb6a4');
+    polygon([[300,210],[700,210],[870,535],[130,535]],'#71c4b4');
+    line(300,210,130,535,'#fff');line(700,210,870,535,'#fff');line(300,210,700,210,'#fff');line(130,535,870,535,'#fff');line(500,210,500,535,'#fff');
+    rect(180,340,640,9,'#fff');for(let x=190;x<820;x+=16)line(x,350,x,392,'#ffffff80',1);
+    line(180,330,180,409,'#477d92',6);line(820,330,820,409,'#477d92',6);
+    const t=timingAt(now);circle(500+Math.sin(now*.0007)*120,220,25,'#3188a0');
+    circle(shot?500+shot.aim*280*progress:500+Math.sin(now*.002)*60,shot?480-progress*290:200+t*280,13,'#edff73');
+    ctx.strokeStyle='#ef795e';ctx.lineWidth=8;ctx.beginPath();ctx.ellipse(500+aim*300,470,32,43,-.3,0,Math.PI*2);ctx.stroke();line(510+aim*300,505,530+aim*300,550,'#fff',10);
+  } else if(game.id==='boxing') {
+    rect(0,0,1000,560,'#c2deef');rect(80,220,840,340,'#698eb4');
+    for(let i=0;i<3;i++)line(80,240+i*80,920,240+i*80,i===1?'#fff':'#e77e76',9);
+    for(const x of [80,920])rect(x,180,15,380,'#4f739a');
+    circle(500,185,45,'#e8c9a6');rect(440,225,120,160,'#e9f1f6');
+    const target=500+Math.sin(now*.001)*135;circle(target,300,53,'#294e73');circle(target,300,30,'#fff');circle(target,300,12,'#ed897b');
+    const punch=shot?Math.sin(progress*Math.PI)*130:0;
+    circle(340+aim*160,495-punch,56,'#f1786b');circle(650+aim*90,495-(block?70:0),56,'#f1786b');
+    rect(300+aim*160,525-punch,80,45,'#fff');
+  } else if(game.id==='golf') {
+    polygon([[0,280],[180,180],[350,280]],'#75bca9');polygon([[630,280],[820,170],[1000,280]],'#75bca9');
+    ctx.fillStyle='#b8df87';ctx.beginPath();ctx.ellipse(530,355,370,125,0,0,Math.PI*2);ctx.fill();
+    circle(700,330,45,'#d9c994');circle(555,310,9,'#386f58');line(555,310,555,210,'#fff',4);polygon([[555,210],[600,225],[555,240]],'#ed7e6b');
+    const x=500+(shot?shot.aim:aim)*180*progress,y=500-progress*190;
+    circle(x,y-(shot?Math.sin(progress*Math.PI)*shot.power*180:0),10,'#fff');
+    line(500,485,555+aim*150,340,'#ffffff70',2);
+  } else {
+    polygon([[500,180],[900,400],[500,560],[100,400]],'#d6b887');polygon([[500,260],[760,400],[500,520],[240,400]],'#93ce8e');
+    line(500,520,100,400,'#fff',4);line(500,520,900,400,'#fff',4);
+    for(const [x,y] of [[500,520],[260,400],[500,285],[740,400]])polygon([[x,y-8],[x+10,y],[x,y+8],[x-10,y]],'#fff');
+    const t=timingAt(now);circle(shot?500+shot.aim*350*progress:500,shot?500-progress*420:240+t*260,shot?12-progress*7:8+t*5,'#fff');
+    line(630+aim*100,530,shot?420:560+aim*120,shot?400:430,'#bb8255',18);
+    circle(500,268,16,'#457a9b');rect(486,285,28,50,'#fff');
+  }
+  // Pointer is driven by phone orientation or the left/right buttons.
+  if(!finished){const x=500+aim*300;circle(x,400,18,'#ffffff99');line(x-28,400,x+28,400,'#168dbd',3);line(x,372,x,428,'#168dbd',3);}
+  ctx.font='17px Trebuchet MS';ctx.fillStyle='#284c60';ctx.fillText(`${game.sport} · ${finished?'Match complete':match[turn].name}`,25,32);
+}
+requestAnimationFrame(draw);
