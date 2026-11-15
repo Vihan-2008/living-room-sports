@@ -67,9 +67,18 @@ The channel shows the game's own modes: **Grand Prix**, **Time Trials**, **VS Ra
 
 ### While a game runs
 
-The Wii Menu waits behind Dolphin with a **Now playing** screen. Quitting the game in Dolphin, or pressing **Close the game** there, brings you back. Dolphin is asked to close the way its own close button does, so the game is not killed mid-save. Closing the Wii Menu window does not end a running game either. The game keeps all its controllers, and the Wii Menu comes back when the game ends.
+The Wii Menu waits behind Dolphin with a **Now playing** screen. Any of these brings you back to it:
 
-If Dolphin closes unexpectedly, the Wii Menu says what happened, for example a crash with Windows' error code. It also shows the end of Dolphin's log for that run.
+- in the game, press **Home** and choose **Wii Menu**, as on a Wii;
+- press **Esc** while the game window is in front (Dolphin's Stop key);
+- on a phone, open **⋯** and tap **Quit the game** twice;
+- on the PC, press **Close the game** on Now playing.
+
+Each one asks Dolphin to close the way its own close button does, so a game is never killed mid-save. Unless a Wii Menu has been installed into Dolphin from a real Wii, Dolphin has none to go to, and a game sent there would hang. The console sees that request in Dolphin's log and closes the game instead. Closing the Wii Menu window does not end a running game. The game keeps all its controllers, and the Wii Menu comes back when the game ends.
+
+Games open on the screen chosen in **Wii Options › Dolphin › Game screen**. To move a game that is already running, press **Move to the other screen** on Now playing, or use a phone's **⋯** menu. The next game then opens on that screen too. Dolphin runs borderless full screen for these launches, so the game fills each screen at its real resolution: a 2560 × 1600 screen at 200% scaling gets all 2560 × 1600 pixels.
+
+If Dolphin closes unexpectedly, the Wii Menu says what happened, for example a crash with Windows' error code. It also shows the end of Dolphin's log for that run. During these launches Dolphin writes its warnings to that log instead of showing pop-ups that need a mouse. None of the launch settings are saved into Dolphin's own files.
 
 ## Controllers
 
@@ -81,6 +90,8 @@ If Dolphin closes unexpectedly, the Wii Menu says what happened, for example a c
 | **Wii Remote** | — | Dolphin's own real-Wii-Remote support | Dolphin's own real-Wii-Remote support |
 
 Some sports need a Nunchuk (Boxing, Archery, Power Cruising and Cycling). All of Resort needs MotionPlus. Each selector entry shows this, along with how each controller copes. Boxing, Power Cruising and Cycling expect two hands, so with one phone or a DualSense they work with limits; each entry explains how.
+
+Wii Sports ignores a Nunchuk it does not need, so its Wii Remotes always have one. Wii Sports Resort does not: in any sport without a Nunchuk it stops and asks for the extension to be unplugged from the MotionPlus. So in Resort the Nunchuk is attached only when you start Archery, Power Cruising or Cycling. To change to a sport that needs it, or away from one, quit the game and choose the sport from the selector.
 
 **Wii Options › Controllers** has four tabs:
 
@@ -97,7 +108,7 @@ The console writes these layouts into Dolphin for each game and puts Dolphin's o
 
 Phones and iPads need the same Wi-Fi as the PC; guest networks that keep devices apart will not work. Open **Connect controllers** (the controller button in the bottom-right corner) and scan the code with each one's camera. Up to four join. Each takes the next free player number, and a phone that drops out gets its number back when it returns.
 
-The phone shows a Wii Remote: pointer, D-pad, A, B, −, Home, +, 1 and 2. In a sport that needs a Nunchuk it adds C, Z and a stick. In Mario Kart Wii it turns into a wheel. The **⋯** button shows the menu path for the running game, recentres the pointer, quits the game (tap twice), or leaves.
+The phone shows a Wii Remote: pointer, D-pad, A, B, −, Home, +, 1 and 2. In a sport that needs a Nunchuk it adds C, Z and a stick. In Mario Kart Wii it turns into a wheel. The **⋯** button shows the menu path for the running game, recentres the pointer, moves the game to the PC's other screen, quits the game (tap twice), or leaves.
 
 The controller follows the screen. Upright, the remote stands up. In landscape it lies across the screen with the D-pad under your left thumb and A and B under your right, and the Nunchuk sits to its left. Either way, **the top edge of the screen is the end you point at the TV**. The wheel is always wide, so on an upright screen it is drawn across and you turn the phone to hold it. The layout only changes once the phone has been still for a moment, so a swing that tips the screen does not rearrange the buttons mid-game. On an iPad everything is drawn larger, and the iPad follows the same motion steps as an iPhone.
 
@@ -158,7 +169,8 @@ JARVIS runs `python check.py`, which runs the same Node tests. They cover:
 
 - the console API, the setup steps and the Dolphin launch arguments, with a stand-in Dolphin;
 - writing and restoring Dolphin's controller settings;
-- how each kind of exit is reported;
+- how each kind of exit is reported, and Home › Wii Menu in a game closing it;
+- which screen a game opens on, and moving it between screens of different sizes and scaling;
 - the channel catalogue and the phone's game guide;
 - the phone controller page, run in a fake browser: motion maths, iPhone calibration, layouts, following the screen into landscape, iPad sizing, multi-touch and reconnecting;
 - the phone setup page and certificate download;

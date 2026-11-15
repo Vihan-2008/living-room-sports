@@ -97,7 +97,7 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
   function activityFor(state) {
     if (!state?.dolphin?.running) return { mode: 'menu' };
     const { title, sport } = state.dolphin;
-    return { mode: 'game', title, sport, ...activityNeeds(title, sport), ...activityGuide(title, sport, state.settings?.menu?.lastMode) };
+    return { mode: 'game', title, sport, ...activityNeeds(title, sport), ...activityGuide(title, sport, state.settings?.menu?.lastMode), screens: state.screens?.length || 1 };
   }
   consoleApi?.onChange(state => {
     const next = activityFor(state);
@@ -234,6 +234,8 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
         broadcast();
       } else if (msg.type === 'quit' && client.role === 'remote') {
         consoleApi?.dolphin.stop();
+      } else if (msg.type === 'screen' && client.role === 'remote') {
+        consoleApi?.dolphin.moveTo('next').catch(() => {});
       } else if (msg.type === 'rumble' && (client === host || client.role === 'menu')) {
         send(slots[msg.slot - 1], { type: 'rumble', duration: Math.min(250, Math.max(0, Number(msg.duration) || 60)) });
       } else if (msg.type === 'kick' && client.role === 'menu') {

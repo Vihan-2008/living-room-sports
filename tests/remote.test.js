@@ -430,3 +430,23 @@ test('quitting from the phone takes two taps, and the console can remove a phone
   assert.match(app.$('remote-status').textContent, /removed this phone/);
   assert.equal(app.sockets.length, 1, 'and it does not rejoin by itself');
 });
+
+test('in a game the sheet says Home › Wii Menu quits too, and offers the other screen only when there is one', async () => {
+  const app = await remote(), socket = app.join();
+  const game = { mode: 'game', title: 'sports', sport: 'tennis', layout: 'remote', nunchuk: false, name: 'Tennis', path: [] };
+  app.activity(socket, { ...game, screens: 1 });
+  assert.equal(app.$('quit-note').hidden, false);
+  assert.match(html, /id="quit-note"[^>]*>You can also press Home in the game and choose Wii Menu\.</);
+  assert.equal(app.$('move-game').hidden, true, 'one screen: nowhere to move to');
+  app.activity(socket, { ...game, screens: 2 });
+  assert.equal(app.$('move-game').hidden, false);
+  assert.equal(app.$('move-game').textContent, 'Move the game to the other screen');
+  app.$('more-button').onclick();
+  app.$('move-game').onclick();
+  assert.ok(socket.sent.some(m => m.type === 'screen'));
+  assert.equal(app.$('sheet').hidden, true);
+  app.activity(socket, { ...game, screens: 3 });
+  assert.equal(app.$('move-game').textContent, 'Move the game to the next screen');
+  app.activity(socket, { mode: 'menu' });
+  assert.ok(app.$('move-game').hidden && app.$('quit-note').hidden, 'nothing about the game on the Wii Menu');
+});

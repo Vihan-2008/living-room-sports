@@ -17,7 +17,8 @@ export function defaults() {
     gameFolders: [],
     gameFiles: [],
     titles: { mkw: '', sports: '', resort: '' },
-    launch: { fullscreen: true, backgroundInput: true },
+    // screen: 'main', or the id Windows gives another screen (such as \\.\DISPLAY1).
+    launch: { fullscreen: true, backgroundInput: true, screen: 'main' },
     controls: {
       // 'console': write this app's layouts into Dolphin for each launch (and undo them afterwards).
       // 'dolphin': leave Dolphin's own controller settings alone.

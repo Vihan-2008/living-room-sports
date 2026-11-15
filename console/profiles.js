@@ -1,5 +1,6 @@
 // Builds the Dolphin controller profiles and per-game [Controls] keys for one launch.
 import { WIIMOTE, NUNCHUK, POINTER, MOTION_AXES, KEYBOARD_MOTION, GCPAD } from '../public/bindings.js';
+import { activityNeeds } from '../public/catalog.js';
 
 export const DSU_NAME = 'LivingRoomPhones';
 export const DUALSENSE_NAMES = ['DualSense Wireless Controller', 'PS5 Controller'];
@@ -80,16 +81,21 @@ export function profileText(lines) {
   return ['[Profile]', ...Object.entries(lines).map(([key, value]) => `${key} = ${value}`), ''].join('\n');
 }
 
+// nunchuk 'sport': attached only when the sport being started uses one. Wii Sports ignores a Nunchuk it does not
+// need, so it always has one ready for Boxing. Wii Sports Resort does not: with anything plugged into the
+// MotionPlus it stops and asks for it to be disconnected, so only Archery, Power Cruising and Cycling get one.
 const TITLE_SETUP = {
   mkw: { gamepadAs: 'gc', nunchuk: false, motionPlus: false, tag: 'Kart' },
   sports: { gamepadAs: 'wiimote', nunchuk: true, motionPlus: false, tag: 'Sports' },
-  resort: { gamepadAs: 'wiimote', nunchuk: true, motionPlus: true, tag: 'Resort' }
+  resort: { gamepadAs: 'wiimote', nunchuk: 'sport', motionPlus: true, tag: 'Resort' }
 };
 
-// players: four entries from PLAYER_TYPES. Returns everything one launch needs.
-export function buildLaunchPlan(title, players, { keyboardP1 = true, deadzone = 0.1, dualsenseNames = DUALSENSE_NAMES } = {}) {
-  const setup = TITLE_SETUP[title];
-  if (!setup) throw new Error(`Unknown title ${title}`);
+// players: four entries from PLAYER_TYPES; sport: the selector entry being started, if any. Returns everything
+// one launch needs.
+export function buildLaunchPlan(title, players, { sport = null, keyboardP1 = true, deadzone = 0.1, dualsenseNames = DUALSENSE_NAMES } = {}) {
+  const known = TITLE_SETUP[title];
+  if (!known) throw new Error(`Unknown title ${title}`);
+  const setup = { ...known, nunchuk: known.nunchuk === 'sport' ? activityNeeds(title, sport).nunchuk : known.nunchuk };
   const profiles = [], controls = {}, config = [], roles = [];
   let gcPort = 0, padIndex = 0;
   const siDevices = [SI_NONE, SI_NONE, SI_NONE, SI_NONE];

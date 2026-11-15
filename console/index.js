@@ -7,6 +7,7 @@ import { scanLibrary, chooseTitles, TITLES, DISC_EXTENSIONS } from './disc.js';
 import { createDolphinManager, findDolphin, resolveUserDir, dolphinVersion, exists, LaunchError } from './dolphin.js';
 import { createDsuServer, padFromPhone } from './dsu.js';
 import { pick as nativePick } from './dialogs.js';
+import { createDisplays } from './screens.js';
 import { PHONE_TO_DSU } from '../public/bindings.js';
 
 const MAX_BODY = 64 * 1024;
@@ -42,9 +43,11 @@ export function createConsole({ dataDir, dsuPort = 26760, getPhones = () => [], 
   let dolphinInfo = { path: '', found: false, version: null, userDir: null, userDirReason: null };
   let https = { ready: false, port: null, error: null };
   let dsuError = null;
+  // A test that fakes Dolphin gets no real screen helper unless it brings its own.
+  const displays = 'displays' in hooks ? hooks.displays : hooks.spawn ? null : createDisplays({ onChange: () => notify() });
 
   const dolphin = createDolphinManager({
-    settings, dataDir, dsuPort: () => dsu.port, focusApp, userDirOf,
+    settings, dataDir, dsuPort: () => dsu.port, focusApp, userDirOf, displays,
     spawn: hooks.spawn, processes: hooks.processes, close: hooks.close, identifyDisc: hooks.identify,
     onChange: () => notify()
   });
@@ -98,7 +101,8 @@ export function createConsole({ dataDir, dsuPort = 26760, getPhones = () => [], 
       setup: setupSteps(s),
       dsu: { ...dsu.info(), error: dsuError },
       https,
-      phones: getPhones()
+      phones: getPhones(),
+      screens: (displays?.screens || []).map(({ id, name, primary, width, height }) => ({ id, name, primary, width, height }))
     };
   }
 
@@ -179,6 +183,8 @@ export function createConsole({ dataDir, dsuPort = 26760, getPhones = () => [], 
       return state();
     },
     'POST /api/stop': async body => { await dolphin.stop({ foreign: body.foreign === true }); return state(); },
+    'POST /api/screens': async () => { await displays?.list().catch(() => {}); return state(); },
+    'POST /api/screen': async body => { await dolphin.moveTo(typeof body.to === 'string' ? body.to.slice(0, 64) : 'next'); return state(); },
     'POST /api/exit/dismiss': async () => { dolphin.clearLastExit(); return state(); }
   };
 
@@ -201,6 +207,7 @@ export function createConsole({ dataDir, dsuPort = 26760, getPhones = () => [], 
     await settings.load();
     await dolphin.restore().catch(() => {});
     try { await dsu.start(); } catch (error) { dsuError = `Phone controllers for Dolphin are unavailable: ${error.message}`; }
+    displays?.list().catch(() => {});
     await refreshDolphin();
     await scan();
   }

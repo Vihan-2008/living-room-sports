@@ -10,6 +10,8 @@ import dgram from 'node:dgram';
 import { createApp } from '../server.js';
 import { createConsole } from '../console/index.js';
 import { crc32, PROTOCOL_VERSION } from '../console/dsu.js';
+import { createDisplays } from '../console/screens.js';
+import { fakeWindows, until, SECOND } from './fake-windows.js';
 
 function discImage(id, title) {
   const buf = Buffer.alloc(0x440);
@@ -17,7 +19,8 @@ function discImage(id, title) {
   return buf;
 }
 
-async function fixture(t, { players } = {}) {
+// displays: a screen helper for the console; without one, screens are not reported and games cannot move.
+async function fixture(t, { players, displays } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'lrs-api-'));
   const exe = join(dir, 'Dolphin-x64', 'Dolphin.exe'), userDir = join(dir, 'DolphinUser'), games = join(dir, 'Games');
   await mkdir(join(dir, 'Dolphin-x64'), { recursive: true }); await writeFile(exe, 'stub');
@@ -35,7 +38,8 @@ async function fixture(t, { players } = {}) {
     spawn, findDolphin: async () => exe, resolveUserDir: async () => ({ dir: userDir, reason: 'test' }),
     processes: async () => spawned.filter(s => !s.exited).map(s => s.child.pid),
     close: async pid => { closed.push(pid); const s = spawned.find(x => x.child.pid === pid); if (s && !s.exited) { s.exited = true; s.child.emit('exit', 0, null); } },
-    pick: async kind => (kind === 'dolphin' ? [exe] : [games])
+    pick: async kind => (kind === 'dolphin' ? [exe] : [games]),
+    ...(displays ? { displays } : {})
   };
   let app;
   const consoleApi = createConsole({ dataDir: join(dir, 'data'), dsuPort: 0, getPhones: () => app.roster(), hooks });
@@ -207,4 +211,25 @@ test('phones get their own slot back after a drop, but not after being removed; 
   await menu.get('console', m => m.state.settings.phones.joining === true);
   const retry = await client(f.ws); retry.send({ type: 'join', code: f.app.code, clientId: 'phone-bbbb-2222' });
   assert.equal((await retry.get('joined')).returning, false, 'a removed phone joins as new');
+});
+
+test('the menu and the phones can move a running game to the other screen, and the screens are reported', async t => {
+  const windows = fakeWindows({ window: { x: 0, y: 0, width: 1920, height: 1080 } });
+  const f = await fixture(t, { displays: createDisplays({ run: windows.run }) });
+  const listed = await f.call('/api/screens', {});
+  assert.deepEqual(listed.body.screens.map(s => [s.name, s.width, s.height]), [['Main screen', 1920, 1080], ['Second screen', 2560, 1600]]);
+  const idle = await f.call('/api/screen', { to: 'next' });
+  assert.equal(idle.status, 409); assert.equal(idle.body.code, 'not-running');
+  await f.call('/api/dolphin/detect', {}); await f.call('/api/pick', { kind: 'games' });
+  const phone = await client(f.ws); phone.send({ type: 'join', code: f.app.code });
+  await phone.get('joined');
+  await f.call('/api/launch', { title: 'sports', sport: 'tennis' });
+  assert.equal((await phone.get('activity', a => a.mode === 'game')).screens, 2, 'the phone knows there is another screen');
+  const moved = await f.call('/api/screen', { to: 'next' });
+  assert.equal(moved.status, 200);
+  assert.equal(moved.body.settings.launch.screen, SECOND, 'kept for the next game');
+  assert.equal(windows.window.x, 1920);
+  phone.send({ type: 'screen' });
+  await until(() => windows.window.x === 0);
+  await until(async () => (await f.call('/api/state')).body.settings.launch.screen === 'main');
 });
