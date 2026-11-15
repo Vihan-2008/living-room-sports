@@ -73,14 +73,14 @@ export function createApp() {
       } else if (msg.type === 'input' && client.role === 'remote') {
         const now = Date.now();
         // Never drop button releases or gestures behind a high-rate sensor update.
-        if (!msg.button && !msg.shake && !msg.swing) {
+        if (!msg.button && !msg.shake && !msg.swing && msg.cancel !== true) {
           if (now - client.last < 12) return;
           client.last = now;
         }
         const bounded = (v, lo, hi) => Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : 0;
         const buttons = ['up', 'down', 'left', 'right', 'a', 'b', 'minus', 'plus', 'home', 'one', 'two'];
         send(host, { type: 'input', slot: client.slot, button: buttons.includes(msg.button) ? msg.button : null,
-          pressed: msg.pressed === true, swing: bounded(msg.swing, 0, 1), shake: msg.shake === true, pointing: msg.pointing === true,
+          pressed: msg.pressed === true, cancel: msg.cancel === true, swing: bounded(msg.swing, 0, 1), shake: msg.shake === true, pointing: msg.pointing === true,
           x: bounded(msg.x, -1, 1), y: bounded(msg.y, -1, 1) });
       } else if (msg.type === 'rumble' && client === host) {
         send(slots[msg.slot - 1], { type: 'rumble', duration: Math.min(250, Math.max(0, Number(msg.duration) || 60)) });
@@ -113,7 +113,10 @@ export function createApp() {
     socket.on('close', () => {
       clients.delete(client);
       if (client === host) host = null;
-      if (client.slot && slots[client.slot - 1] === client) slots[client.slot - 1] = null;
+      if (client.slot && slots[client.slot - 1] === client) {
+        send(host, { type: 'input', slot: client.slot, cancel: true });
+        slots[client.slot - 1] = null;
+      }
       broadcast();
     });
     if (head.length) consume(head);

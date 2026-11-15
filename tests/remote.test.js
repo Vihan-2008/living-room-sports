@@ -62,13 +62,18 @@ test('two fingers on one button emit one press and release only after both lift'
   assert.deepEqual(socket.sent.filter(m => m.button === 'b').map(m => m.pressed), [true, false]);
 });
 
-test('independent buttons, pointer cancellation and lost capture release exactly once', async () => {
+test('pointer cancellation and lost capture cancel all controls without a shot release', async () => {
   const app = await remote(), socket = app.join();
   app.pointer('left', 'down', 1); app.pointer('b', 'down', 2);
   app.pointer('left', 'cancel', 1); app.pointer('left', 'lostpointercapture', 1);
   app.pointer('b', 'lostpointercapture', 2); app.pointer('b', 'up', 2);
   assert.deepEqual(socket.sent.filter(m => m.button).map(m => [m.button, m.pressed]),
-    [['left', true], ['b', true], ['left', false], ['b', false]]);
+    [['left', true], ['b', true]]);
+  assert.equal(socket.sent.filter(m => m.cancel === true).length, 1);
+  assert.ok(app.buttons.every(b => !b.classList.contains('held')));
+  app.pointer('b', 'down', 3); app.pointer('b', 'lostpointercapture', 3); app.pointer('b', 'up', 3);
+  assert.equal(socket.sent.filter(m => m.cancel === true).length, 2);
+  assert.equal(socket.sent.filter(m => m.button === 'b' && !m.pressed).length, 0);
 });
 
 for (const reason of ['blur', 'visibilitychange']) test(`${reason} clears held controls and suppresses sensors until resumed`, async () => {
@@ -77,8 +82,9 @@ for (const reason of ['blur', 'visibilitychange']) test(`${reason} clears held c
   app.sensors(); app.pointer('b', 'down');
   if (reason === 'visibilitychange') app.document.hidden = true;
   app.handlers[reason]();
-  const release = socket.sent.findLast(m => m.button === 'b');
-  assert.equal(release.pressed, false); assert.equal(release.x, 0); assert.equal(release.y, 0);
+  const release = socket.sent.findLast(m => m.cancel === true);
+  assert.ok(release); assert.equal(release.x, 0); assert.equal(release.y, 0);
+  assert.equal(socket.sent.filter(m => m.button === 'b' && !m.pressed).length, 0);
   assert.equal(release.swing, undefined);
   assert.deepEqual(socket.sent.at(-1), { type: 'input', x: 0, y: 0, pointing: true });
   assert.ok(app.buttons.every(b => !b.classList.contains('held')));
@@ -98,7 +104,8 @@ test('leave releases controls before closing and rejoining starts with fresh poi
   await app.elements.get('enable-motion').onclick();
   app.pointer('b', 'down'); app.elements.get('leave').onclick();
   assert.equal(socket.events.at(-1), 'close');
-  assert.equal(socket.sent.findLast(m => m.button === 'b').pressed, false);
+  assert.equal(socket.sent.findLast(m => m.cancel === true).cancel, true);
+  assert.equal(socket.sent.filter(m => m.button === 'b' && !m.pressed).length, 0);
   socket.onclose(); assert.equal(app.timers.size, 1); // Only the sensor-data notice, no reconnect.
   const count = socket.sent.length; app.tick(); app.sensors();
   assert.equal(socket.sent.length, count);
