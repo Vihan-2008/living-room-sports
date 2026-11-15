@@ -12,12 +12,18 @@ const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 function connect() {
   socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`);
   socket.onopen = () => { socket.send(JSON.stringify({ type: 'host' })); $('connection').textContent = 'Room online'; };
-  socket.onclose = () => { $('connection').textContent = 'Reconnecting…'; setTimeout(connect, 1500); };
+  socket.onclose = () => {
+    releaseSportsControls();
+    if (race) for (const p of race.racers) p.controls = {};
+    $('connection').textContent = 'Reconnecting…'; setTimeout(connect, 1500);
+  };
   socket.onmessage = e => {
     const msg = JSON.parse(e.data);
     if (msg.type === 'roster') {
+      const activeRemoteLost = sportMatch && players.some(p => p.slot === match[turn].slot && p.connected) && !msg.players.some(p => p.slot === match[turn].slot && p.connected);
       players = msg.players;
       if (race) for (const p of race.racers) if (p.slot > 0 && !players.some(q => q.slot === p.slot && q.connected)) p.controls = {};
+      if (activeRemoteLost) releaseSportsControls();
       renderPlayers(); if (game) renderScores();
     }
     if (msg.type === 'error') $('connection').textContent = msg.message;
@@ -155,8 +161,13 @@ function keyboardRacer() {
   const active = race?.racers.filter(p => !p.bot && p.finishTime === null) || [];
   return active.find(p => p.slot === 0) || active.find(p => !players.some(q => q.slot === p.slot && q.connected)) || active[0];
 }
-window.addEventListener('blur', () => { if (race) { const p = keyboardRacer(); if (p) p.controls = {}; } });
+function releaseSportsControls() { charging = false; block = false; }
+window.addEventListener('blur', () => {
+  releaseSportsControls();
+  if (race) { const p = keyboardRacer(); if (p) p.controls = {}; }
+});
 for (const id of ['pair', 'pair-bottom']) $(id).onclick = () => {
+  releaseSportsControls();
   if (race) for (const p of race.racers) p.controls = {};
   $('pair-dialog').showModal();
 };
