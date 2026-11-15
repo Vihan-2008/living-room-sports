@@ -37,7 +37,7 @@ function recenter() { baseAlpha = null; baseBeta = null; x = 0; y = 0; send({ sh
 $('recenter').onclick = recenter;
 function releaseAll() {
   x = 0; y = 0; baseAlpha = null; baseBeta = null; swing = 0;
-  for (const button of held) send({ button, pressed: false }, true);
+  if (held.size) send({ cancel: true }, true);
   held.clear(); pointers.clear(); document.querySelectorAll('.held').forEach(el => el.classList.remove('held'));
   send({ pointing: true }, true);
 }
@@ -59,7 +59,9 @@ for (const button of document.querySelectorAll('[data-button]')) {
     if ([...pointers.values()].includes(button.dataset.button) || !held.delete(button.dataset.button)) return;
     button.classList.remove('held'); send({ button: button.dataset.button, pressed: false, swing: button.dataset.button === 'b' ? swing : 0 }, true); swing = 0;
   };
-  button.onpointerup = release; button.onpointercancel = release; button.onlostpointercapture = release;
+  button.onpointerup = release;
+  const cancel = e => { if (pointers.get(e.pointerId) === button.dataset.button) releaseAll(); };
+  button.onpointercancel = cancel; button.onlostpointercapture = cancel;
 }
 window.addEventListener('blur', () => { suspended = true; releaseAll(); });
 window.addEventListener('focus', () => { suspended = document.hidden; });
