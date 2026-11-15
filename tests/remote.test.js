@@ -487,4 +487,10 @@ test('when the game moves to another screen the phone asks to be pointed at it, 
   menuOnly.activity(other, { ...game, screen: 'Main screen' });
   menuOnly.activity(other, { ...game, screen: 'Second screen' });
   assert.equal(menuOnly.$('aim-here').hidden, true, 'a phone that only works the Wii Menu is not playing, so it is not asked');
+
+  const brawl = { mode: 'game', title: 'brawl', layout: 'remote', nunchuk: true, pointer: false, name: 'Super Smash Bros. Brawl', path: [], screens: 2 };
+  app.activity(socket, { ...brawl, screen: 'Main screen' });
+  app.activity(socket, { ...brawl, screen: 'Second screen' });
+  assert.equal(app.$('aim-here').hidden, true, 'Brawl never uses the pointer, so there is nothing to aim');
+  assert.equal(app.$('controller').dataset.layout, 'nunchuk', 'a Brawl player holds a Wii Remote and Nunchuk');
 });

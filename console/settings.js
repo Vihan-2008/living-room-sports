@@ -16,7 +16,7 @@ export function defaults() {
     dolphinPath: '',
     gameFolders: [],
     gameFiles: [],
-    titles: { mkw: '', sports: '', resort: '' },
+    titles: { mkw: '', sports: '', resort: '', brawl: '' },
     // screen: 'main', or the id Windows gives another screen (such as \\.\DISPLAY1).
     launch: { fullscreen: true, backgroundInput: true, screen: 'main' },
     controls: {
@@ -30,7 +30,8 @@ export function defaults() {
     },
     phones: { joining: true },
     display: { aspect: 'auto', startFullscreen: false, sounds: true, volume: 0.6 },
-    menu: { lastChannel: 'mkw', lastSport: 'tennis', lastMode: 'grand-prix', editions: { bowling: 'sports', golf: 'sports' } },
+    // modes: the mode last chosen on each channel that lists modes.
+    menu: { lastChannel: 'mkw', lastSport: 'tennis', modes: { mkw: 'grand-prix', brawl: 'brawl' }, editions: { bowling: 'sports', golf: 'sports' } },
     setupSeen: false
   };
 }

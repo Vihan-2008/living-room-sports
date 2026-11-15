@@ -35,10 +35,13 @@ public static class LivingRoomScreens
     [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr window, out RECT rect);
     [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr window, uint flags);
     [DllImport("user32.dll")] static extern bool SetWindowPos(IntPtr window, IntPtr after, int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll")] static extern int GetWindowLong(IntPtr window, int index);
 
     // Real pixels on every screen, whatever its scaling.
     static void Aware() { SetThreadDpiAwarenessContext(new IntPtr(-4)); }
     static string Text(RECT r) { return r.Left + "," + r.Top + "," + (r.Right - r.Left) + "," + (r.Bottom - r.Top); }
+    // 1 while the window has a title bar. Dolphin's full screen has none, whatever size the window is.
+    static int Framed(IntPtr window) { return (GetWindowLong(window, -16) & 0x00C00000) == 0x00C00000 ? 1 : 0; }
 
     static string Describe(IntPtr monitor)
     {
@@ -100,27 +103,31 @@ public static class LivingRoomScreens
             if (window != IntPtr.Zero && GetWindowRect(window, out r)) place = Text(r);
             bool settled = place != null && (waitMs <= 0 || (window == last && place == lastPlace));
             if (settled || DateTime.UtcNow >= deadline)
-                return place == null ? "" : "window\t" + window.ToInt64() + "\t" + place + "\t" + DeviceOf(window);
+                return place == null ? "" : "window\t" + window.ToInt64() + "\t" + place + "\t" + DeviceOf(window) + "\t" + Framed(window);
             last = window;
             lastPlace = place;
             Thread.Sleep(500);
         }
     }
 
-    // Moving onto a screen with different scaling makes the window rescale itself, so the place is set again until it holds.
+    // Moving onto a screen with different scaling makes the window rescale itself, so the place is set again until it
+    // holds. If Dolphin takes the window into or out of full screen meanwhile, setting the place again would undo
+    // that, so it stops there and reports what the window became.
     public static string Move(long handle, int x, int y, int width, int height)
     {
         Aware();
         IntPtr window = new IntPtr(handle);
         RECT r = new RECT();
+        int framed = Framed(window);
         for (int attempt = 0; attempt < 5; attempt++)
         {
             SetWindowPos(window, IntPtr.Zero, x, y, width, height, 0x0004 | 0x0010 | 0x0200);
             Thread.Sleep(200);
             if (!GetWindowRect(window, out r)) return "";
+            if (Framed(window) != framed) break;
             if (r.Left == x && r.Top == y && r.Right - r.Left == width && r.Bottom - r.Top == height) break;
         }
-        return "moved\t" + Text(r) + "\t" + DeviceOf(window);
+        return "moved\t" + Text(r) + "\t" + DeviceOf(window) + "\t" + Framed(window);
     }
 }
 '@
@@ -146,12 +153,12 @@ export function parseHelper(text) {
       const [id, primary, bounds, work, dpi] = fields;
       const box = rect(bounds), area = rect(work);
       if (box && area) screens.push({ id, primary: primary === '1', ...box, work: area, scale: (Number(dpi) || 96) / 96 });
-    } else if (kind === 'window' && fields.length === 3) {
+    } else if (kind === 'window' && fields.length === 4) {
       const box = rect(fields[1]);
-      if (box) window = { handle: fields[0], ...box, screen: fields[2] };
-    } else if (kind === 'moved' && fields.length === 2) {
+      if (box) window = { handle: fields[0], ...box, screen: fields[2], framed: fields[3] === '1' };
+    } else if (kind === 'moved' && fields.length === 3) {
       const box = rect(fields[0]);
-      if (box) moved = { ...box, screen: fields[1] };
+      if (box) moved = { ...box, screen: fields[1], framed: fields[2] === '1' };
     }
   }
   screens.sort((a, b) => (b.primary - a.primary) || a.x - b.x || a.y - b.y);
@@ -177,8 +184,10 @@ export function fillsScreen(window, screen) {
 
 // Where the window goes on `to`. A full-screen game fills the new screen exactly; a windowed one keeps the size it
 // looks on screen (so it doubles going onto a 200% screen), shrinks to fit if it must, and sits in the middle.
+// A window with no title bar is full screen even when it does not fill its screen: one moved while Dolphin was
+// going full screen can be left that way, and filling the screen puts it right.
 export function placeWindow(window, from, to) {
-  if (fillsScreen(window, from)) return { x: to.x, y: to.y, width: to.width, height: to.height };
+  if (window.framed === false || fillsScreen(window, from)) return { x: to.x, y: to.y, width: to.width, height: to.height };
   const ratio = to.scale / (from.scale || 1);
   const width = Math.min(Math.round(window.width * ratio), to.work.width);
   const height = Math.min(Math.round(window.height * ratio), to.work.height);

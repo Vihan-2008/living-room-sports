@@ -282,9 +282,9 @@ input[type="text"]:focus, input[type="text"].is-hot { border-color: var(--wii); 
 .support-none .support-level { color: #b2462f; }
 .sport-detail .note { margin-top: 12px; }
 
-/* ---- Mario Kart Wii channel ------------------------------------------------------------------ */
-.mkw-layout { display: grid; grid-template-columns: 340px 1fr; gap: 28px; }
-.stage[data-aspect="4:3"] .mkw-layout { grid-template-columns: 250px 1fr; gap: 18px; }
+/* ---- Mario Kart Wii and Brawl channels: modes beside a panel -------------------------------- */
+.modes-layout { display: grid; grid-template-columns: 340px 1fr; gap: 28px; }
+.stage[data-aspect="4:3"] .modes-layout { grid-template-columns: 250px 1fr; gap: 18px; }
 .modes { display: grid; gap: 12px; align-content: start; }
 .mode {
   display: grid; gap: 4px; justify-items: start; padding: 12px 22px; min-height: 72px; text-align: left; outline: none;
@@ -296,9 +296,9 @@ input[type="text"]:focus, input[type="text"].is-hot { border-color: var(--wii); 
 .mode[aria-pressed="true"] .mode-name { color: var(--wii-ink); }
 .mode[data-mode="online"] .mode-name { color: var(--ink-faint); font-size: 18px; }
 .mode.is-hot { border-color: var(--wii); box-shadow: 0 0 0 4px rgba(52,189,236,.28); }
-.mkw-panel { display: flex; flex-direction: column; min-width: 0; padding: 18px 24px; }
-.mkw-body { flex: 1; min-height: 0; margin-top: 16px; padding-right: 6px; display: grid; gap: 8px; align-content: start; }
-.mkw-body h2 { margin-top: 6px; }
+.modes-panel { display: flex; flex-direction: column; min-width: 0; padding: 18px 24px; }
+.modes-body { flex: 1; min-height: 0; margin-top: 16px; padding-right: 6px; display: grid; gap: 8px; align-content: start; }
+.modes-body h2 { margin-top: 6px; }
 .bindings { width: 100%; border-collapse: collapse; font-size: 17px; }
 .bindings th, .bindings td { text-align: left; padding: 8px 10px; border-bottom: 2px solid #e6eaec; vertical-align: top; }
 .bindings thead th { font: 600 16px/1.2 var(--font); color: var(--ink-soft); }

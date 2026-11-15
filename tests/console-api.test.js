@@ -90,7 +90,7 @@ test('the console API answers only this PC, and only requests made by the menu',
   const state = await f.call('/api/state');
   assert.equal(state.status, 200);
   assert.equal(state.body.dolphin.found, false);
-  assert.deepEqual(state.body.setup.map(s => [s.id, s.done]), [['dolphin', false], ['mkw', false], ['sports', false], ['resort', false]]);
+  assert.deepEqual(state.body.setup.map(s => [s.id, s.done]), [['dolphin', false], ['mkw', false], ['sports', false], ['resort', false], ['brawl', false]]);
   assert.match(state.body.setup[0].next, /Dolphin\.exe/);
 });
 
@@ -214,7 +214,7 @@ test('phones get their own slot back after a drop, but not after being removed; 
 });
 
 test('the menu and the phones can move a running game to the other screen, and the screens are reported', async t => {
-  const windows = fakeWindows({ window: { x: 0, y: 0, width: 1920, height: 1080 } });
+  const windows = fakeWindows({ window: { x: 0, y: 0, width: 1920, height: 1080, framed: false } });
   const f = await fixture(t, { displays: createDisplays({ run: windows.run }) });
   const listed = await f.call('/api/screens', {});
   assert.deepEqual(listed.body.screens.map(s => [s.name, s.width, s.height]), [['Main screen', 1920, 1080], ['Second screen', 2560, 1600]]);

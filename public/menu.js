@@ -14,6 +14,7 @@ const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
 const CHANNELS = [
   { id: 'sports', name: 'Wii Sports', art: 'sports' },
   { id: 'mkw', name: 'Mario Kart Wii', art: 'mkw' },
+  { id: 'brawl', name: 'Super Smash Bros. Brawl', art: 'brawl' },
   { id: 'arcade', name: 'Living Room Sports', art: 'arcade' }
 ];
 const PAGE_COUNT = 4, PER_PAGE = 12, BANNER_HEIGHT = 560;

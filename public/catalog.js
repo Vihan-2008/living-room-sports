@@ -1,8 +1,12 @@
-// Channel catalogue: the Wii Sports selector (15 sports, 17 title-specific entries) and Mario Kart Wii modes.
-// Dolphin can open a disc but cannot choose a sport or mode inside it, so every entry starts its title and
-// shows the in-game menu path. Menu paths follow the games' manuals; they are not verified on this PC.
+// Channel catalogue: the Wii Sports selector (15 sports, 17 title-specific entries), and the modes of Mario Kart
+// Wii and Super Smash Bros. Brawl. Dolphin can open a disc but cannot choose a sport or mode inside it, so every
+// entry starts its title and shows the in-game menu path. Menu paths follow the games' manuals; they are not
+// verified on this PC.
 
-export const TITLE_NAMES = { sports: 'Wii Sports', resort: 'Wii Sports Resort', mkw: 'Mario Kart Wii' };
+export const TITLE_NAMES = { sports: 'Wii Sports', resort: 'Wii Sports Resort', mkw: 'Mario Kart Wii', brawl: 'Super Smash Bros. Brawl' };
+
+// The 2-in-1 "Wii Sports + Wii Sports Resort" disc can stand in for either of its two games, and nothing else.
+export const discFits = (kind, title) => kind === title || (kind === 'pack' && (title === 'sports' || title === 'resort'));
 
 const WS_START = ['Press A at the wrist-strap reminder', 'Press A at the title screen'];
 const WSR_START = ['Press A at the wrist-strap reminder', 'Press A at the title screen (the first time, also skip the intro and the MotionPlus video with A)'];
@@ -76,19 +80,27 @@ export const sportById = id => SPORTS.find(sport => sport.id === id) || null;
 export function editionOf(sport, title) { return sport.editions.find(e => e.title === title) || sport.editions[0]; }
 export const ENTRY_COUNT = SPORTS.reduce((sum, sport) => sum + sport.editions.length, 0);
 
-// What a running activity needs from each controller (for the phone's on-screen layout).
+// What a running activity needs from each controller (for the phone's on-screen layout). pointer: whether the game
+// aims the Wii Remote at the screen anywhere, menus included. Brawl never does, so a phone is not asked to aim.
 export function activityNeeds(title, sportId) {
-  if (title === 'mkw') return { layout: 'wheel', nunchuk: false, motionPlus: false };
+  if (title === 'mkw') return { layout: 'wheel', nunchuk: false, motionPlus: false, pointer: true };
+  if (title === 'brawl') return { layout: 'remote', nunchuk: true, motionPlus: false, pointer: false };
   const sport = sportById(sportId);
   const edition = sport ? editionOf(sport, title) : null;
-  return { layout: 'remote', nunchuk: edition ? edition.requires.nunchuk : false, motionPlus: title === 'resort' };
+  return { layout: 'remote', nunchuk: edition ? edition.requires.nunchuk : false, motionPlus: title === 'resort', pointer: true };
+}
+
+// The mode a title starts in, from the id last chosen on its channel; an unavailable mode is never one.
+export function modeOf(title, modeId) {
+  const modes = MODES[title] || [];
+  return modes.find(m => m.id === modeId && !m.unavailable) || null;
 }
 
 // What a phone shows about the running game: its name, the edition or mode, and the in-game menu path.
 export function activityGuide(title, sportId, modeId = null) {
-  if (title === 'mkw') {
-    const mode = MKW_MODES.find(m => m.id === modeId && !m.unavailable) || null;
-    return { name: TITLE_NAMES.mkw, detail: mode?.name || null, path: mode?.path || [] };
+  if (MODES[title]) {
+    const mode = modeOf(title, modeId);
+    return { name: TITLE_NAMES[title], detail: mode?.name || null, path: mode?.path || [] };
   }
   const sport = sportById(sportId);
   const edition = sport ? editionOf(sport, title) : null;
@@ -111,3 +123,21 @@ export const MKW_MODES = [
     path: ['Press A at the title screen', 'Choose Multiplayer (or Single Player)', 'Choose Battle'] },
   { id: 'online', name: 'Mario Kart Channel and online play', players: '—', detail: 'Unavailable: Nintendo closed the Wii\'s online service in 2014.', unavailable: true, path: [] }
 ];
+
+// Seen in Dolphin on this PC: the wrist-strap reminder passes by itself, and the first start asks to create a save
+// file before the title screen.
+const BRAWL_START = ['Wait for the wrist-strap reminder to pass', 'The first time, choose Yes to create a save file', 'Press A or Start at the title screen'];
+export const BRAWL_MODES = [
+  { id: 'brawl', name: 'Brawl', players: '1–4', detail: 'Free-for-all or team fights on any unlocked stage. Empty places can be filled with CPU fighters.',
+    path: [...BRAWL_START, 'Choose Group, then Brawl', 'Each player picks a fighter, then choose a stage'] },
+  { id: 'subspace', name: 'The Subspace Emissary', players: '1–2', detail: 'The adventure: side-scrolling stages and boss fights, alone or with a second player.',
+    path: [...BRAWL_START, 'Choose Solo, then The Subspace Emissary', 'Start a new game, or continue a saved one'] },
+  { id: 'classic', name: 'Classic', players: '1', detail: 'A run of set fights against CPU fighters at the difficulty you pick.',
+    path: [...BRAWL_START, 'Choose Solo, then Classic', 'Pick a difficulty and a fighter'] },
+  { id: 'training', name: 'Training', players: '1', detail: 'Try moves at any speed against a CPU fighter that does what you set.',
+    path: [...BRAWL_START, 'Choose Solo, then Training', 'Pick your fighter, an opponent and a stage'] },
+  { id: 'online', name: 'Online play', players: '—', detail: 'Unavailable: Nintendo closed the Wii\'s online service in 2014.', unavailable: true, path: [] }
+];
+
+// The titles whose channel lists modes rather than sports.
+export const MODES = { mkw: MKW_MODES, brawl: BRAWL_MODES };

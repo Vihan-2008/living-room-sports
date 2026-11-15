@@ -125,6 +125,76 @@ function mkwChannel(ctx, w, h, t, banner) {
   else title(ctx, 'Mario Kart Wii', w / 2, h * 0.25, h * 0.17, { stroke: '#c23a2f' });
 }
 
+// A round brawler in a headband, facing right (facing 1) or left (-1), its fist out in front.
+function brawler(ctx, x, y, r, color, facing) {
+  ctx.save(); ctx.translate(x, y); ctx.scale(facing, 1);
+  ctx.fillStyle = '#3a2c2a';
+  for (const fx of [-0.45, 0.45]) { ctx.beginPath(); ctx.ellipse(fx * r, r * 0.95, r * 0.34, r * 0.2, 0, 0, TAU); ctx.fill(); }
+  ctx.fillStyle = color; ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.28)'; ctx.beginPath(); ctx.ellipse(-r * 0.36, -r * 0.42, r * 0.34, r * 0.2, -0.5, 0, TAU); ctx.fill();
+  // The headband, with its two tails flying out behind.
+  ctx.fillStyle = '#fff';
+  ctx.save(); ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.clip(); ctx.fillRect(-r, -r * 0.5, r * 2, r * 0.24); ctx.restore();
+  ctx.beginPath(); ctx.moveTo(-r * 0.9, -r * 0.42); ctx.lineTo(-r * 1.55, -r * 0.7); ctx.lineTo(-r * 1.45, -r * 0.3); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-r * 0.9, -r * 0.34); ctx.lineTo(-r * 1.4, -r * 0.05); ctx.lineTo(-r * 1.1, -r * 0.02); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#fff';
+  for (const ex of [0.22, 0.58]) { ctx.beginPath(); ctx.ellipse(ex * r, -r * 0.08, r * 0.13, r * 0.2, 0, 0, TAU); ctx.fill(); }
+  ctx.fillStyle = '#2a2230';
+  for (const ex of [0.27, 0.63]) { ctx.beginPath(); ctx.arc(ex * r, -r * 0.05, r * 0.08, 0, TAU); ctx.fill(); }
+  ctx.fillStyle = color; ctx.strokeStyle = 'rgba(0,0,0,.22)'; ctx.lineWidth = r * 0.08;
+  ctx.beginPath(); ctx.arc(r * 1.12, r * 0.22, r * 0.32, 0, TAU); ctx.fill(); ctx.stroke();
+  ctx.restore();
+}
+function spark(ctx, x, y, size, spin) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(spin);
+  for (const [scale, color] of [[1, '#ffd23f'], [0.55, '#fff8d6']]) {
+    ctx.fillStyle = color; ctx.beginPath();
+    for (let i = 0; i < 16; i++) { const a = (i / 16) * TAU, d = (i % 2 ? 0.42 : 1) * size * scale; ctx.lineTo(Math.cos(a) * d, Math.sin(a) * d); }
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
+function brawlChannel(ctx, w, h, t, banner) {
+  sky(ctx, w, h, '#2e2c6e', '#f19a5c');
+  const glow = ctx.createRadialGradient(w * 0.8, h * 0.66, 0, w * 0.8, h * 0.66, h * 0.36);
+  glow.addColorStop(0, 'rgba(255,226,150,.95)'); glow.addColorStop(0.35, 'rgba(255,190,110,.5)'); glow.addColorStop(1, 'rgba(255,170,90,0)');
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
+  for (let i = 0; i < 16; i++) {
+    ctx.fillStyle = `rgba(255,255,255,${0.35 + 0.6 * Math.abs(Math.sin(t * 1.6 + i * 1.3))})`;
+    // Spread evenly without falling into rows (the R2 sequence).
+    ctx.beginPath(); ctx.arc(((0.5 + i * 0.754878) % 1) * w, ((0.5 + i * 0.569840) % 1) * h * 0.55, h * 0.006, 0, TAU); ctx.fill();
+  }
+  ctx.fillStyle = 'rgba(255,255,255,.16)';
+  for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.ellipse(((t * 10 + i * w * 0.45) % (w + h)) - h * 0.5, h * (0.86 + i * 0.04), h * 0.5, h * 0.035, 0, 0, TAU); ctx.fill(); }
+
+  // The floating stage, and a small platform hovering on either side.
+  const cx = w / 2, ground = h * 0.78, half = Math.min(w * 0.3, h * 0.95);
+  const rock = ctx.createLinearGradient(0, ground, 0, ground + h * 0.18);
+  rock.addColorStop(0, '#8f7b6c'); rock.addColorStop(1, '#4f4049');
+  ctx.fillStyle = rock; ctx.beginPath();
+  ctx.moveTo(cx - half, ground); ctx.lineTo(cx + half, ground); ctx.lineTo(cx + half * 0.8, ground + h * 0.07);
+  ctx.lineTo(cx + half * 0.16, ground + h * 0.17); ctx.lineTo(cx - half * 0.16, ground + h * 0.17); ctx.lineTo(cx - half * 0.8, ground + h * 0.07); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#7cc45a'; roundRect(ctx, cx - half - h * 0.01, ground - h * 0.014, half * 2 + h * 0.02, h * 0.03, h * 0.012); ctx.fill();
+  for (const side of [-1, 1]) {
+    const px = cx + side * half * 1.35, py = h * 0.6 + Math.sin(t * 1.4 + side) * h * 0.012;
+    ctx.fillStyle = 'rgba(40,30,60,.35)'; roundRect(ctx, px - half * 0.24, py + h * 0.012, half * 0.48, h * 0.016, h * 0.008); ctx.fill();
+    ctx.fillStyle = '#e8e3f7'; roundRect(ctx, px - half * 0.26, py - h * 0.012, half * 0.52, h * 0.024, h * 0.012); ctx.fill();
+  }
+
+  // Two brawlers rush in, clash with a spark, and are knocked apart again.
+  const r = h * (banner ? 0.06 : 0.075), cycle = (t * 0.7) % 1, close = Math.sin(cycle * Math.PI) ** 3;
+  const apart = r * 1.25 + (1 - close) * half * 0.42, hop = Math.abs(Math.sin(cycle * Math.PI * 4)) * r * 0.25 * (1 - close);
+  for (const side of [-1, 1]) {
+    ctx.fillStyle = 'rgba(30,20,40,.25)'; ctx.beginPath(); ctx.ellipse(cx + side * apart, ground - h * 0.004, r * 0.9, r * 0.2, 0, 0, TAU); ctx.fill();
+    brawler(ctx, cx + side * apart, ground - r * 1.12 - hop, r, side < 0 ? '#e8473c' : '#2f8fe0', -side);
+  }
+  if (close > 0.8) spark(ctx, cx, ground - r * 0.95, r * 1.3 * (close - 0.8) / 0.2, t * 3);
+
+  const stroke = '#4b2c74';
+  if (banner) { title(ctx, 'Super Smash Bros.', w / 2, h * 0.14, h * 0.075, { stroke }); title(ctx, 'Brawl', w / 2, h * 0.29, h * 0.17, { stroke }); }
+  else { title(ctx, 'Super Smash Bros.', w / 2, h * 0.15, h * 0.11, { stroke }); title(ctx, 'Brawl', w / 2, h * 0.37, h * 0.22, { stroke }); }
+}
+
 function arcadeChannel(ctx, w, h, t, banner) {
   sky(ctx, w, h, '#2b9fd6', '#7fd0f2');
   ctx.fillStyle = 'rgba(255,255,255,.1)';
@@ -142,7 +212,7 @@ function arcadeChannel(ctx, w, h, t, banner) {
   else title(ctx, 'Living Room Sports', w / 2, h * 0.2, h * 0.15, { stroke: '#0c6c99' });
 }
 
-const CHANNELS = { sports: sportsChannel, mkw: mkwChannel, arcade: arcadeChannel };
+const CHANNELS = { sports: sportsChannel, mkw: mkwChannel, brawl: brawlChannel, arcade: arcadeChannel };
 // scale: how much the stage is enlarged on screen, so tiles stay sharp in full screen.
 export function drawChannel(canvas, id, time, banner = false, scale = 1) {
   const ratio = Math.min(3, (globalThis.devicePixelRatio || 1) * scale);

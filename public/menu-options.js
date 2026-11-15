@@ -1,6 +1,7 @@
 // Wii Options: setup, controllers, phones, screen and sound, and how Dolphin is started.
 import { h, fill, button, frame, segmented, onOff, slider, status, setting, keepFocus, isFullscreen } from './menu-ui.js';
 import { PLAYER_COLORS } from './menu-input.js';
+import { discFits } from './catalog.js';
 
 const PLAYER_CHOICES = [
   { value: 'dualsense', label: 'DualSense' }, { value: 'phone', label: 'Phone' }, { value: 'keyboard', label: 'Keyboard' },
@@ -32,7 +33,7 @@ function gameScreenName(state) {
 // ---- Wii Options hub ----------------------------------------------------------------------------
 function optionsView(ctx) {
   const items = [
-    { id: 'setup', name: 'Setup', detail: s => { const left = s.setup.filter(x => !x.done).length; return left ? `${left} ${left === 1 ? 'thing' : 'things'} left to set up` : 'Dolphin and all three games are ready'; } },
+    { id: 'setup', name: 'Setup', detail: s => { const left = s.setup.filter(x => !x.done).length; return left ? `${left} ${left === 1 ? 'thing' : 'things'} left to set up` : 'Dolphin and all the games are ready'; } },
     { id: 'controllers', name: 'Controllers', detail: () => 'Who plays with what, a test screen, menu buttons and dead zones' },
     { id: 'phones', name: 'Phones', detail: s => { const n = ctx.roster.filter(p => p.connected).length; return n ? `${n} connected` : 'Scan the code with a phone to join'; } },
     { id: 'display', name: 'Screen and sound', detail: s => `${s.settings.display.aspect === 'auto' ? 'Automatic' : s.settings.display.aspect} picture, sounds ${s.settings.display.sounds ? 'on' : 'off'}` },
@@ -78,7 +79,7 @@ function gamesPanel(ctx) {
     const sources = [...library.folders.map(path => ({ path, folder: true })), ...library.files.map(path => ({ path, folder: false }))];
     const recognised = Object.entries(library.titles).map(([key, entry]) => {
       const disc = entry.disc;
-      const copies = library.discs.filter(d => d.kind === key || (d.kind === 'pack' && key !== 'mkw'));
+      const copies = library.discs.filter(d => discFits(d.kind, key));
       return h('li', { class: 'title-row' },
         status(disc ? { done: true, message: entry.name } : state.setup.find(s => s.id === key)),
         disc ? h('p', { class: 'small muted title-facts' }, `${disc.name}: ${disc.id}, ${disc.region}, ${disc.format.toUpperCase()}`) : null,
@@ -89,7 +90,7 @@ function gamesPanel(ctx) {
     const broken = library.discs.filter(d => d.error);
     fill(root,
       h('ul', { class: 'titles' }, recognised),
-      others.length ? h('p', { class: 'small muted' }, `${others.length} other ${others.length === 1 ? 'game was' : 'games were'} found too. Only these three have channels.`) : null,
+      others.length ? h('p', { class: 'small muted' }, `${others.length} other ${others.length === 1 ? 'game was' : 'games were'} found too. Only the games above have channels.`) : null,
       broken.length ? h('p', { class: 'small note' }, `${broken.length} ${broken.length === 1 ? 'file' : 'files'} could not be read: ${broken.slice(0, 3).map(d => d.name).join(', ')}${broken.length > 3 ? '…' : ''}`) : null,
       h('div', { class: 'row-actions' },
         button('Add a folder', () => ctx.attempt(() => ctx.api('/api/pick', { kind: 'folder' })), { kind: library.discs.length ? '' : 'primary', isDefault: true }),

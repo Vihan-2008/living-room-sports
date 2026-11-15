@@ -13,9 +13,9 @@ test('screens are listed main screen first, in real pixels, with the names the m
     [SECOND, 'Second screen', false, 1920, -212, 2560, 1600, 2]
   ], 'a 200% screen keeps its true 2560 × 1600');
   assert.deepEqual(second.work, { x: 1920, y: -212, width: 2560, height: 1552 });
-  const parsed = parseHelper(`${THIS_PC}\r\nwindow\t2428142\t632,269,656,519\t${MAIN}\r\nmoved\t1920,-212,2560,1600\t${SECOND}\r\nnoise\r\nscreen\tbroken`);
-  assert.deepEqual(parsed.window, { handle: '2428142', x: 632, y: 269, width: 656, height: 519, screen: MAIN });
-  assert.deepEqual(parsed.moved, { x: 1920, y: -212, width: 2560, height: 1600, screen: SECOND });
+  const parsed = parseHelper(`${THIS_PC}\r\nwindow\t2428142\t632,269,656,519\t${MAIN}\t1\r\nmoved\t1920,-212,2560,1600\t${SECOND}\t0\r\nnoise\r\nscreen\tbroken`);
+  assert.deepEqual(parsed.window, { handle: '2428142', x: 632, y: 269, width: 656, height: 519, screen: MAIN, framed: true });
+  assert.deepEqual(parsed.moved, { x: 1920, y: -212, width: 2560, height: 1600, screen: SECOND, framed: false }, 'Dolphin\'s full screen has no title bar');
   assert.equal(parsed.screens.length, 2, 'lines it does not understand are skipped');
   assert.deepEqual(parseHelper(''), { screens: [], window: null, moved: null });
 });
@@ -39,6 +39,9 @@ test('a full-screen game fills the other screen exactly; a windowed one keeps ho
   assert.deepEqual(placeWindow({ x: 2544, y: 45, width: 1312, height: 1038 }, second, main), { x: 632, y: 257, width: 656, height: 519 });
   assert.deepEqual(placeWindow({ x: 10, y: 10, width: 1600, height: 1000 }, main, second), { x: 1920, y: -212, width: 2560, height: 1552 },
     'too big to double, so it is shrunk to fit');
+  const stuck = { x: 636, y: 290, width: 648, height: 500, framed: false }; // full screen with no title bar, but small
+  assert.deepEqual(placeWindow(stuck, main, second), { x: 1920, y: -212, width: 2560, height: 1600 }, 'a window with no title bar is full screen, whatever its size');
+  assert.deepEqual(placeWindow(stuck, main, main), { x: 0, y: 0, width: 1920, height: 1080 }, 'and on its own screen it is made to fill it');
 });
 
 test('the helper is asked for the right window and place, and the latest screen list is kept', async () => {
@@ -48,7 +51,7 @@ test('the helper is asked for the right window and place, and the latest screen 
   assert.deepEqual(displays.screens, []);
   const found = await displays.gameWindow(4100, 20000);
   assert.deepEqual(windows.calls[0], { LRS_DO: 'window', LRS_PID: '4100', LRS_WAIT: '20000' });
-  assert.deepEqual(found.window, { handle: '2428142', x: 632, y: 269, width: 656, height: 519, screen: MAIN });
+  assert.deepEqual(found.window, { handle: '2428142', x: 632, y: 269, width: 656, height: 519, screen: MAIN, framed: true });
   assert.equal(displays.screens[1].name, 'Second screen');
   const { moved } = await displays.move(found.window.handle, { x: 1920, y: -212, width: 2560, height: 1600 });
   assert.deepEqual(windows.calls[1], { LRS_DO: 'move', LRS_WINDOW: '2428142', LRS_RECT: '1920,-212,2560,1600' });

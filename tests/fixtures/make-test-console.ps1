@@ -26,6 +26,7 @@ function New-Disc([string] $Name, [string] $Id, [string] $Title) {
 New-Disc 'Mario Kart Wii (USA).iso' 'RMCE01' 'MARIO KART Wii'
 New-Disc 'Wii Sports (USA).iso' 'RSPE01' 'Wii Sports'
 New-Disc 'Wii Sports Resort (USA).iso' 'RZTE01' 'Wii Sports Resort'
+New-Disc 'Super Smash Bros. Brawl (USA).iso' 'RSBE01' 'Super Smash Bros. Brawl'
 
 Write-Output "Stub Dolphin: $(Join-Path $dolphinDir 'Dolphin.exe')"
 Write-Output "Games folder: $games"
