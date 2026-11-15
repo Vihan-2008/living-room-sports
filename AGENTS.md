@@ -1,0 +1,1 @@
+Build what the owner asks, in whatever language and tools suit it best. Keep changes focused, add meaningful tests, and add the commands that run them to TESTS in check.py: JARVIS runs `python check.py` before it puts a change in. Never deploy or access secrets.
