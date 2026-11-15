@@ -124,7 +124,7 @@ function input(m) {
       const p = m.slot === 0 ? keyboardRacer() : race.racers.find(p => p.slot === m.slot && !p.bot);
       if (p) raceInput(race, p.slot, m);
     } else if (game && (m.slot === match[turn].slot || m.slot === 0)) {
-      charging = false; block = false;
+      releaseSportsControls();
     }
     return;
   }

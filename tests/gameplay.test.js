@@ -234,6 +234,24 @@ test('kart cancellation clears only the affected racer including under a modal a
   assert.equal(app.run('race.racers.filter(p => !p.bot).every(p => Object.keys(p.controls).length === 0)'), true);
 });
 
+test('pairing and connection interruptions discard stored drift without awarding a boost', async () => {
+  for (const reason of ['pair', 'pair-bottom', 'roster', 'disconnect', 'blur', 'hidden']) {
+    const app = await dashboard();
+    app.run(`players = ${JSON.stringify(players(2).map(p => ({ ...p, connected: true })))}; start(0); race.time = 1;
+      input({slot: 1, button: 'b', pressed: true}); input({slot: 1, button: 'right', pressed: true}); race.racers[0].drift = 1.2;`);
+    if (reason === 'pair' || reason === 'pair-bottom') app.elements.get(reason).onclick();
+    if (reason === 'roster') app.run(`socket.onmessage({data: JSON.stringify({type: 'roster', players: players.map(p => ({...p, connected: p.slot !== 1}))})});`);
+    if (reason === 'disconnect') app.run('socket.onclose()');
+    if (reason === 'blur') app.handlers.blur();
+    if (reason === 'hidden') { app.run('document.hidden = true'); app.handlers.visibilitychange(); }
+    assert.equal(app.run('Object.keys(race.racers[0].controls).length'), 0, reason);
+    assert.equal(app.run('race.racers[0].drift'), 0, reason);
+    app.elements.get('pair-dialog').close();
+    app.run('stepRace(race, .05)');
+    assert.equal(app.run('race.racers[0].boost'), 0, reason);
+  }
+});
+
 test('solo tennis and boxing results correctly name the CPU winner after losses', async () => {
   const app = await dashboard();
   // Fix scoring to misses to isolate result UI from the moving timing window.
