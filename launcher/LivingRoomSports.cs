@@ -1,16 +1,22 @@
 // Desktop launcher for Living Room Sports.
 //
 // Double-clicking the shortcut runs this program. It starts the game server (node server.js) with no
-// console window, opens the dashboard in its own app window (Edge or Chrome, no tabs or address bar),
+// console window, opens the Wii Menu in its own app window (Edge or Chrome, no tabs or address bar),
 // and stops the server when that window closes. A second launch brings the open window to the front.
+// Closing the window while a game runs does not end the game: the server stays up for its controllers,
+// and the Wii Menu opens again when the game ends.
 //
 // Built by launcher\install.ps1 with the C# compiler that ships with Windows (.NET Framework 4), so this
-// file sticks to C# 5. Options (mainly for tests):
+// file sticks to C# 5. Options:
 //   --check            start (or find) the server, confirm it answers, prepare the browser profile,
-//                      then stop; no window, no dialogs
+//                      then stop; no window, no dialogs (used by the tests)
+//   --focus            bring the open Wii Menu window to the front; with --pid <n>, that process's window
+//                      instead (the server asks for this, since Windows does not let it take the foreground)
 //   --port <n>         server port (default 3000)
 //   --project <dir>    folder holding server.js (default: found by walking up from this .exe)
-//   --data-dir <dir>   where the log and browser profile live (default %LOCALAPPDATA%\LivingRoomSports)
+//   --data-dir <dir>   where settings, the log and the browser profile live
+//                      (default %LOCALAPPDATA%\LivingRoomSports, the same folder the server uses)
+//   --browser <exe>    a Chromium-based browser to use instead of Edge or Chrome
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -39,6 +45,7 @@ static class Launcher
     static StreamWriter log;
     static string logPath;
     static bool checkOnly;
+    static string browserPath;
 
     enum Probe { Free, Ours, Other }
 
@@ -46,20 +53,33 @@ static class Launcher
     static int Main(string[] args)
     {
         Application.EnableVisualStyles();
-        int port = 3000;
+        int port = 3000, pid = 0;
+        bool focusOnly = false;
         string project = null, dataDir = null, argError = null;
         for (int i = 0; i < args.Length; i++)
         {
             string a = args[i];
             if (a == "--check") checkOnly = true;
+            else if (a == "--focus") focusOnly = true;
             else if (a == "--port" && i + 1 < args.Length)
             {
                 if (!int.TryParse(args[++i], out port) || port < 1 || port > 65535) argError = "Invalid --port value.";
             }
+            else if (a == "--pid" && i + 1 < args.Length)
+            {
+                if (!int.TryParse(args[++i], out pid) || pid < 1) argError = "Invalid --pid value.";
+            }
             else if (a == "--project" && i + 1 < args.Length) project = args[++i];
             else if (a == "--data-dir" && i + 1 < args.Length) dataDir = args[++i];
+            else if (a == "--browser" && i + 1 < args.Length)
+            {
+                browserPath = Path.GetFullPath(args[++i]);
+                if (!File.Exists(browserPath)) argError = "The browser was not found: " + browserPath;
+            }
             else argError = "Unknown option: " + a;
         }
+        // The server runs --focus on its own; it must never show a message or start anything.
+        if (focusOnly) return argError == null ? Focus(port, pid) : 1;
         if (argError != null) return Fail(argError);
 
         if (dataDir == null)
@@ -108,10 +128,10 @@ static class Launcher
                 return Fail("Port " + port + " is already in use by another program. Close that program and try again.");
             else
             {
-                string node = FindNode();
+                string node = FindNode(project);
                 if (node == null)
                     return Fail("Node.js was not found. Install Node.js 22 or newer from https://nodejs.org, then try again.");
-                server = StartServer(node, project, port, job);
+                server = StartServer(node, project, port, dataDir, job);
                 if (!WaitForServer(server, port, TimeSpan.FromSeconds(20)))
                     return Fail(server.HasExited
                         ? "The game server stopped while starting (exit code " + server.ExitCode + ")."
@@ -120,8 +140,21 @@ static class Launcher
             }
             string profile = Path.Combine(dataDir, "browser-profile");
             if (!ProfileInUse(profile)) DisableBackgroundMode(profile);
+            bool fullScreen = StartsFullScreen(dataDir);
+            Log("Window: " + (fullScreen ? "full screen" : "maximized") + ".");
             if (checkOnly) { Log("Check passed."); return 0; }
-            ShowApp(url, profile, port, job);
+            using (EventWaitHandle showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName(port)))
+            {
+                while (true)
+                {
+                    ShowApp(url, profile, fullScreen, showEvent, job);
+                    // A server someone else started is theirs to stop; otherwise a running game keeps it up.
+                    if (server == null || GameRunning(port) != true) break;
+                    Log("The window closed while a game is running; the server stays up until the game ends.");
+                    if (!WaitForGameToEnd(port, showEvent)) break;
+                    Log("Opening the Wii Menu again.");
+                }
+            }
             return 0;
         }
         catch (Exception e)
@@ -166,7 +199,7 @@ static class Launcher
         }
     }
 
-    static Process StartServer(string node, string project, int port, IntPtr job)
+    static Process StartServer(string node, string project, int port, string dataDir, IntPtr job)
     {
         ProcessStartInfo psi = new ProcessStartInfo(node, "\"" + Path.Combine(project, "server.js") + "\"");
         psi.WorkingDirectory = project;
@@ -177,6 +210,8 @@ static class Launcher
         psi.StandardOutputEncoding = Encoding.UTF8;
         psi.StandardErrorEncoding = Encoding.UTF8;
         psi.EnvironmentVariables["PORT"] = port.ToString();
+        psi.EnvironmentVariables["LRS_DATA_DIR"] = dataDir;
+        psi.EnvironmentVariables["LRS_LAUNCHER"] = Assembly.GetExecutingAssembly().Location;
         Process p = new Process();
         p.StartInfo = psi;
         p.OutputDataReceived += (s, e) => { if (e.Data != null) Log("[server] " + e.Data); };
@@ -216,8 +251,48 @@ static class Launcher
         catch (Exception e) { Log("Could not stop server: " + e.Message); }
     }
 
-    static string FindNode()
+    // Whether Dolphin is running a game; null when the server does not answer.
+    static bool? GameRunning(int port)
     {
+        try
+        {
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create("http://127.0.0.1:" + port + "/api/state");
+            req.Proxy = null;
+            req.Timeout = 5000;
+            req.ReadWriteTimeout = 5000;
+            req.KeepAlive = false;
+            using (HttpWebResponse res = (HttpWebResponse)req.GetResponse())
+            using (StreamReader reader = new StreamReader(res.GetResponseStream(), Encoding.UTF8))
+            {
+                JavaScriptSerializer json = new JavaScriptSerializer();
+                json.MaxJsonLength = int.MaxValue;
+                object dolphin = Field(json.Deserialize<Dictionary<string, object>>(reader.ReadToEnd()), "dolphin");
+                return true.Equals(Field(dolphin as Dictionary<string, object>, "running"));
+            }
+        }
+        catch (WebException) { return null; }
+        catch (ArgumentException) { return null; }
+        catch (InvalidOperationException) { return null; }
+    }
+
+    // Waits while the game runs. True when the Wii Menu should open again (the game ended, or the shortcut
+    // was opened); false when the server stopped answering.
+    static bool WaitForGameToEnd(int port, EventWaitHandle showEvent)
+    {
+        while (true)
+        {
+            if (showEvent.WaitOne(1000)) return true;
+            bool? running = GameRunning(port);
+            if (running == null) { Log("The server stopped answering."); return false; }
+            if (running == false) return true;
+        }
+    }
+
+    static string FindNode(string project)
+    {
+        // The portable build carries its own Node.js.
+        string bundled = Path.Combine(project, @"runtime\node.exe");
+        if (File.Exists(bundled)) return bundled;
         string path = Environment.GetEnvironmentVariable("PATH") ?? "";
         foreach (string entry in path.Split(';'))
         {
@@ -256,9 +331,9 @@ static class Launcher
 
     // ---- App window ---------------------------------------------------------------------------------
 
-    static void ShowApp(string url, string profile, int port, IntPtr job)
+    static void ShowApp(string url, string profile, bool fullScreen, EventWaitHandle showEvent, IntPtr job)
     {
-        string browser = FindBrowser();
+        string browser = browserPath ?? FindBrowser();
         if (browser == null)
         {
             Log("Edge and Chrome were not found; opening the default browser.");
@@ -269,9 +344,9 @@ static class Launcher
         }
         // A separate browser profile gives the game its own window and process, so closing the window
         // ends this launcher (and the server) without touching the person's normal browser.
-        string args = "--app=" + url + " --user-data-dir=\"" + profile + "\" --no-first-run --no-default-browser-check --start-maximized";
+        string args = "--app=" + url + " --user-data-dir=\"" + profile + "\" --no-first-run --no-default-browser-check " +
+                      (fullScreen ? "--start-fullscreen" : "--start-maximized");
         Log("Opening app window: " + browser + " " + args);
-        using (EventWaitHandle showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName(port)))
         using (ManualResetEvent closed = new ManualResetEvent(false))
         {
             ProcessStartInfo psi = new ProcessStartInfo(browser, args);
@@ -349,6 +424,29 @@ static class Launcher
         catch (Exception e) { Log("Warning: could not update " + path + ": " + e.Message); }
     }
 
+    // Wii Options › Display › "Start full screen", from the settings file the server keeps.
+    static bool StartsFullScreen(string dataDir)
+    {
+        string path = Path.Combine(dataDir, "settings.json");
+        if (!File.Exists(path)) return false;
+        try
+        {
+            Dictionary<string, object> settings = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(File.ReadAllText(path, Encoding.UTF8));
+            return true.Equals(Field(Field(settings, "display") as Dictionary<string, object>, "startFullscreen"));
+        }
+        catch (Exception e)
+        {
+            Log("Warning: could not read " + path + ": " + e.Message);
+            return false;
+        }
+    }
+
+    static object Field(Dictionary<string, object> map, string name)
+    {
+        object value;
+        return map != null && map.TryGetValue(name, out value) ? value : null;
+    }
+
     static string FindBrowser()
     {
         string x86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
@@ -401,12 +499,55 @@ static class Launcher
         {
             if (window.HasExited) return;
             window.Refresh();
-            IntPtr handle = window.MainWindowHandle;
-            if (handle == IntPtr.Zero) return;
-            if (IsIconic(handle)) ShowWindow(handle, 9 /* SW_RESTORE */);
-            SetForegroundWindow(handle);
+            if (window.MainWindowHandle != IntPtr.Zero) ForceForeground(window.MainWindowHandle);
         }
         catch (InvalidOperationException) { }
+    }
+
+    // --focus: hand the foreground to the Wii Menu window (through the running launcher) or to the window of
+    // process `pid` (Dolphin, which can take a moment to open its window).
+    static int Focus(int port, int pid)
+    {
+        if (pid == 0)
+        {
+            EventWaitHandle show;
+            if (EventWaitHandle.TryOpenExisting(ShowEventName(port), out show)) using (show) show.Set();
+            return 0;
+        }
+        try
+        {
+            using (Process target = Process.GetProcessById(pid))
+            {
+                DateTime deadline = DateTime.UtcNow.AddSeconds(15);
+                while (DateTime.UtcNow < deadline && !target.HasExited)
+                {
+                    target.Refresh();
+                    if (target.MainWindowHandle != IntPtr.Zero) { ForceForeground(target.MainWindowHandle); break; }
+                    Thread.Sleep(200);
+                }
+            }
+        }
+        catch (ArgumentException) { }          // the process has already ended
+        catch (InvalidOperationException) { }
+        return 0;
+    }
+
+    // Windows gives the foreground only to the program the person last used. Sharing that program's input
+    // queue for a moment lets this one pass the foreground on, as a click on the window would.
+    static void ForceForeground(IntPtr window)
+    {
+        if (IsIconic(window)) ShowWindow(window, 9 /* SW_RESTORE */);
+        IntPtr current = GetForegroundWindow();
+        if (current == window) return;
+        uint ignored;
+        uint theirs = current == IntPtr.Zero ? 0 : GetWindowThreadProcessId(current, out ignored), ours = GetCurrentThreadId();
+        bool attached = theirs != 0 && theirs != ours && AttachThreadInput(ours, theirs, true);
+        try
+        {
+            BringWindowToTop(window);
+            SetForegroundWindow(window);
+        }
+        finally { if (attached) AttachThreadInput(ours, theirs, false); }
     }
 
     static string ShowEventName(int port) { return @"Local\LivingRoomSports-Show-" + port; }
@@ -498,4 +639,14 @@ static class Launcher
     static extern bool IsIconic(IntPtr window);
     [DllImport("user32.dll")]
     static extern bool AllowSetForegroundWindow(int processId);
+    [DllImport("user32.dll")]
+    static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")]
+    static extern bool BringWindowToTop(IntPtr window);
+    [DllImport("user32.dll")]
+    static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
+    [DllImport("user32.dll")]
+    static extern bool AttachThreadInput(uint attach, uint attachTo, bool join);
+    [DllImport("kernel32.dll")]
+    static extern uint GetCurrentThreadId();
 }

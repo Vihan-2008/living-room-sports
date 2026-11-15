@@ -1,84 +1,166 @@
 # Living Room Sports
 
-A Wii-inspired living room dashboard, four phone remotes, five original sports games, and a simultaneous kart-racing channel. Plain HTML, CSS and JavaScript; a dependency-free Node HTTP/WebSocket server. Everything is served locally, with no accounts or external assets.
+A Wii Menu for your PC. It starts your own copies of **Wii Sports**, **Wii Sports Resort** and **Mario Kart Wii** in the Dolphin emulator. Phones become Wii Remotes, with pointer, buttons and motion. A DualSense or the keyboard works too. It also has an original arcade of five sports and a kart racer that runs in the window itself, with no games needed.
 
-## Open it like an app (Windows)
+No Nintendo games, firmware or artwork are included, and this project is not affiliated with Nintendo. Use discs you own.
 
-Install Node.js 22 or newer if needed, then double-click **Create Shortcut.cmd** in this folder once (or run `npm run shortcut`). It builds `dist\LivingRoomSports.exe` with the C# compiler built into Windows and adds a **Living Room Sports** shortcut to the Desktop and the Start menu. Right-click the Start menu entry to pin it to Start or the taskbar.
+- [Install](#install)
+- [First run](#first-run)
+- [Playing](#playing)
+- [Controllers](#controllers)
+- [Phones](#phones)
+- [Settings and saves](#settings-and-saves)
+- [When something goes wrong](#when-something-goes-wrong)
+- [The arcade](#the-arcade)
+- [Building and tests](#building-and-tests)
 
-Opening the shortcut starts the game server with no console window and opens the dashboard in its own maximized window (Microsoft Edge, or Chrome if Edge is missing), without tabs or an address bar. Press **F11** for full screen on a TV. Closing the window stops the server, which disconnects the phones. Opening the shortcut again while the game is open brings its window to the front. If the server is already running from `npm start`, the shortcut uses it and leaves it running.
+## Install
 
-The window uses its own browser profile in `%LOCALAPPDATA%\LivingRoomSports`, separate from your normal browser. If something goes wrong, the launcher shows a message; details are in `%LOCALAPPDATA%\LivingRoomSports\launcher.log`. Run **Create Shortcut.cmd** again after moving the project folder. To remove the shortcuts, delete them from the Desktop and Start menu, then delete the `dist` folder.
+### Portable build
 
-## Run on this PC
+1. Unzip `LivingRoomSports-1.0.0-portable.zip` anywhere, for example in `Documents\Games`.
+2. Open **Living Room Sports.exe** from the unzipped folder.
+3. Optional: run **Add Shortcuts.cmd** once to put Living Room Sports on the Desktop and in the Start menu. Run it again if you move the folder.
 
-Install Node.js 22 or newer if needed. In this project folder run:
+There is nothing else to install. Node.js is in the folder's `runtime` folder. The window is Microsoft Edge, which comes with Windows, or Chrome. The launcher is built on your PC and is not signed. If Windows SmartScreen warns about it after the zip has travelled through the internet, choose **More info › Run anyway**.
+
+### From this source folder
+
+Install Node.js 22 or newer, then double-click **Create Shortcut.cmd**. It builds `dist\LivingRoomSports.exe` and adds the same shortcuts. `npm run package` builds the portable folder and zip in `dist`.
+
+## First run
+
+Setup opens by itself the first time. You can reopen it from **Wii Options › Setup** at any time. Each step says what is missing and exactly what to do about it.
+
+1. **Dolphin.** Dolphin is not included. Download a current version from [dolphin-emu.org](https://dolphin-emu.org) and unzip it anywhere. Then press **Find automatically**, or **Choose Dolphin.exe** to pick it yourself.
+2. **Games.** Press **Add a folder** and choose the folder that holds your discs (`.iso`, `.wbfs`, `.rvz`, `.wia`, `.gcz`, `.ciso` or `.gcm`), or **Add a game file**. Each disc is recognised by the ID in its header, not its file name, and shown with the channel it belongs to. Files that cannot be read as a Wii disc are named, so you can replace them.
+3. **Players.** Choose what each of the four players holds: **DualSense**, **Phone**, **Keyboard**, **Wii Remote** (a real one, connected to Dolphin) or **Off**.
+4. **Phones.** Scan the code to join; see [Phones](#phones).
+5. **Test.** Press buttons and move the sticks. Each controller lights up as it is used.
+6. **Ready.** A summary of what is set up, and who plays with what.
+
+Nothing is ever shown as playable unless its disc is found and readable. A channel whose game is missing still opens. Its preview names the missing piece, and **Start** opens Setup to fix it.
+
+## Playing
+
+The Wii Menu works like the console's. Point at a channel and press **A**, or click it, to see its preview. **Start** begins the game, and **Wii Menu** goes back. The arrows at the screen's edges, or **−** and **+**, turn the page. **Wii Options** is in the bottom-left corner and the clock is in the middle.
+
+### Wii Sports
+
+One channel covers both discs. **Start** opens a selector of 15 sports with 17 entries: Bowling and Golf each appear once, with **Original** and **Resort** editions to choose between. Each entry lists its players, modes and controller needs. It also says how well each kind of controller plays it.
+
+Dolphin can start a disc but cannot choose a sport inside it. So every entry starts its game and shows the shortest menu path to the sport, for example *Press A at the wrist-strap reminder › Press A at the title screen › Choose Golf (7th of 12)*. The same steps appear on each phone. The paths follow the games' manuals. When you come back, the selector is on the sport you last played.
+
+### Mario Kart Wii
+
+The channel shows the game's own modes: **Grand Prix**, **Time Trials**, **VS Race** and **Battle**, each with its menu path. Online play is listed as unavailable, since Nintendo closed the service in 2014. The **Controls** tab shows the bindings for every player's controller:
+
+| Action | DualSense | Keyboard | Phone (held like a wheel) |
+| --- | --- | --- | --- |
+| Steer | Left stick | ← → | Tilt the phone |
+| Accelerate | ✕ Cross | X | 2 |
+| Brake / reverse | □ Square | Z | 1 |
+| Drift / hop | R1 or R2 | C | B |
+| Use item | L1 or L2 | Space | ✚ |
+| Trick / wheelie | D-pad ↑ | I | Flick the phone up |
+| Pause | Options | Enter | + |
+
+### While a game runs
+
+The Wii Menu waits behind Dolphin with a **Now playing** screen. Quitting the game in Dolphin, or pressing **Close the game** there, brings you back. Dolphin is asked to close the way its own close button does, so the game is not killed mid-save. Closing the Wii Menu window does not end a running game either. The game keeps all its controllers, and the Wii Menu comes back when the game ends.
+
+If Dolphin closes unexpectedly, the Wii Menu says what happened, for example a crash with Windows' error code. It also shows the end of Dolphin's log for that run.
+
+## Controllers
+
+| | In the Wii Menu | In Wii Sports and Resort | In Mario Kart Wii |
+| --- | --- | --- | --- |
+| **Phone** | Points like a Wii Remote; buttons on screen | Wii Remote with motion and MotionPlus; Nunchuk on screen when a sport needs it | Wii Wheel: hold it sideways and tilt |
+| **DualSense** | Left stick moves the hand, ✕ selects, ○ goes back, PS is Home | Wii Remote: gyro points and motion swings (R3 recentres) | GameCube controller layout |
+| **Keyboard and mouse** | Mouse, arrow keys, Enter, Esc, Page Up / Page Down | Mouse points; W A S D F R swing, Q E tilt | GameCube layout on the keyboard |
+| **Wii Remote** | — | Dolphin's own real-Wii-Remote support | Dolphin's own real-Wii-Remote support |
+
+Some sports need a Nunchuk (Boxing, Archery, Power Cruising and Cycling). All of Resort needs MotionPlus. Each selector entry shows this, along with how each controller copes. Boxing, Power Cruising and Cycling expect two hands, so with one phone or a DualSense they work with limits; each entry explains how.
+
+**Wii Options › Controllers** has four tabs:
+
+- **Players**: who plays with what.
+- **Test**: shows every button and stick as it is pressed.
+- **Menu buttons**: remaps the DualSense for the Wii Menu.
+- **Dead zones**: one for the menu and one for games.
+
+A DualSense that disconnects shows a notice and reconnects by itself when it is turned back on.
+
+The console writes these layouts into Dolphin for each game and puts Dolphin's own settings back when the game ends. If you would rather set up controllers in Dolphin yourself, choose **Wii Options › Dolphin › Controller layouts › Dolphin's own**.
+
+## Phones
+
+Phones need the same Wi-Fi as the PC; guest networks that keep devices apart will not work. Open **Connect controllers** (the controller button in the bottom-right corner) and scan the code with each phone's camera. Up to four phones join. Each takes the next free player number, and a phone that drops out gets its number back when it returns.
+
+The phone shows a Wii Remote: pointer, D-pad, A, B, −, Home, +, 1 and 2. In a sport that needs a Nunchuk it adds C, Z and a stick. In Mario Kart Wii it turns into a wheel. The **⋯** button shows the menu path for the running game, recentres the pointer, quits the game (tap twice), or leaves.
+
+**Motion** needs one step per phone. Phones only share motion sensors with secure pages, so each phone trusts the PC once:
+
+1. When a phone first joins, it says **Motion is off until this phone trusts the PC** and offers **Turn on motion**.
+2. That page has steps for iPhone and Android. It downloads the PC's certificate and walks through installing and trusting it, then checks that it worked.
+3. After that, scanning the code goes straight to the secure controller with motion on. iPhones still ask for permission once with a tap, because Safari requires one.
+
+The PC creates the certificate itself. It is limited to private network addresses, so it cannot be used to pose as a website on the internet. Buttons work without it. If Windows asks whether Node.js may use the network, allow **private networks**.
+
+## Settings and saves
+
+- **This app's settings**, the phone certificate and the launcher's log live in `%LOCALAPPDATA%\LivingRoomSports`. Deleting that folder resets the console; it does not touch Dolphin or your saves.
+- **Your saves** stay in Dolphin's own user folder, where Dolphin keeps them. This app never moves, copies or deletes them.
+- **Dolphin's settings** are left as they were. For a game it adds controller profiles named *Living Room P1…*. It also writes that game's controller entries, and records the previous values in a journal first. When the game ends the previous values go back. If the PC loses power mid-game, they go back the next time the console starts.
+
+## When something goes wrong
+
+| What you see | What to do |
+| --- | --- |
+| *Dolphin is not set up yet* | Wii Options › Setup › Dolphin: **Find automatically** or **Choose Dolphin.exe**. |
+| *No game file is chosen for this channel* | Wii Options › Setup › Games: add the folder or file with that game. |
+| *The game file is missing* | Reconnect the drive that holds it, or choose the file again. |
+| *Dolphin is already open* | Close Dolphin, then press Start again. **Close an open Dolphin** in Wii Options › Dolphin does it for you. |
+| *Dolphin closed right after starting* | The message includes the end of Dolphin's log. Usually the disc image is damaged or Dolphin is too old; update Dolphin from dolphin-emu.org. |
+| A phone shows *Reconnecting…* | Check it is on the same Wi-Fi as the PC. It rejoins by itself with the same player number. |
+| A phone has no motion | Open **Turn on motion** on the phone and follow it to the end. On iPhone, tap **Allow motion**. |
+| The window does not open | The launcher shows a message. Details are in `%LOCALAPPDATA%\LivingRoomSports\launcher.log`. |
+
+## The arcade
+
+The **Living Room Sports** channel opens the original arcade. It runs in the window with no Dolphin or games, using the same phones.
+
+- **Bluebird Lanes (bowling):** ten frames with strikes, spares and tenth-frame bonus rolls; maximum 300.
+- **Sunbeam Rally (tennis):** time returns in the blue window and aim away from the opponent; games to two.
+- **Cloud Nine Ring (boxing):** timed strikes on a moving target; B blocks. Three rounds or a knockout.
+- **Clover Greens (golf):** three par-3 holes; the first stroke approaches and later strokes putt.
+- **Comet Ballpark (baseball):** three short batting innings.
+- **Seabreeze Kart:** up to four phones race at once on three courses, with drift boosts and items (Boost, Shield, Spark). CPU racers fill the empty places.
+
+On a phone, point to aim, hold B to charge and release to shoot, and shake or press 1 to recentre. On the keyboard, use the arrows to aim, A or Space to play, B to charge or block, and Escape or Home to return. The sports take turns at frame, game, round, hole or inning boundaries. Karts all race at once.
+
+## Building and tests
 
 ```powershell
-npm start
-```
-
-Open **http://localhost:3000** on the PC. Keep one dashboard tab open. Stop the server with Ctrl+C. The server listens on all local interfaces, port 3000; use it on a trusted home network. This app has no internet hosting or deployment step.
-
-## Join with phones
-
-1. Put the PC and phones on the same Wi-Fi. Avoid guest networks with client isolation.
-2. Click **Pair a phone** and scan the first QR code with each phone. QR images are generated locally, without external services. The same code joins up to four phones, assigning each a free player number, colour, name and indicator light automatically. No name, room-code entry or Join tap is required. Reachable dashboard origins (including HTTPS) appear first, followed by LAN alternatives. If a code does not connect, try the alternate network QR; a clickable URL remains as a fallback. Codes support pairing URLs up to 106 UTF-8 bytes; longer URLs fall back to links. Reopen pairing after changing networks. Localhost addresses are never offered for phones.
-3. Keep the phone browser in the foreground. Leaving frees its slot. Reconnection is automatic, but a reconnecting phone may receive another free slot. Manual name/code entry remains available when opening /remote without a valid room URL.
-4. If your OS asks, allow Node on **private networks**. If a phone cannot connect, check the local firewall and Wi-Fi client isolation. Do not expose the port on your router.
-5. On the PC choose a channel, or use the remote D-pad and A. Players connected when the match starts join that match; new arrivals join the next one. Sports alternate players at frame, game, round, hole or inning boundaries. Kart racers play simultaneously. An offline player's turn or kart can be controlled from the PC keyboard; **New match** rebuilds the roster. Without phones, the keyboard controls a solo player.
-
-## Motion sensors and HTTPS
-
-**LAN HTTP works for pairing and all buttons; phone motion needs trusted HTTPS.** After automatic joining, browsers without a permission-request API start sensor listeners automatically. The first orientation reading sets the pointing centre, so no Recenter step is required. Browsers with a permission-request API (including iOS) show **Allow motion**; that tap requests both motion and orientation permission directly, then the browser may show its native permission dialog. Denied permission, missing sensors and insecure pages leave buttons available. The app reports actual sensor availability.
-
-**The requested zero-action, scan-only motion on both iOS and Android is not fully met.** Browser security requires a user gesture for iOS permission requests and a secure context for sensors. Opening a QR URL cannot grant those permissions. This implementation removes typing, Join and calibration steps but cannot remove the browser-required consent. See the [device orientation specification](https://w3c.github.io/deviceorientation/) for the secure-context and transient-activation requirements. Physical-phone testing remains necessary.
-
-For phone motion, the owner must supply a **trusted HTTPS local endpoint** that proxies this app's HTTP and `/ws` WebSocket traffic to port 3000. Open the dashboard and remotes through that same HTTPS endpoint (phone path `/remote?code=ROOMCODE`; copy the room code displayed on the dashboard). When the dashboard uses that endpoint, its HTTPS QR code appears first, followed by direct HTTP alternatives. Its certificate must be trusted by each phone, and its proxy must preserve the public Host/Origin relationship for WebSocket upgrade requests. Self-signed certificate warnings alone may not enable sensors. This project does not generate, read, or manage certificates or keys, configure a proxy, or deploy services. On Android Chrome, a development alternative is the browser's “Insecure origins treated as secure” setting for the exact local HTTP origin; this changes browser security and should be reverted after local testing. iOS generally needs trusted HTTPS.
-
-Device capabilities vary. The browser exposes orientation and acceleration, not a real infrared pointer or a calibrated console controller. Pointing uses relative yaw, swings use acceleration thresholds, and a strong shake recentres. Vibration feedback is best-effort using `navigator.vibrate`; iOS browsers commonly do not support it. Keep a comfortable grip and room to move; gentle gestures suffice.
-
-## Remote and games
-
-The elongated white remote has a round D-pad housing, A, minus, Home, plus, 1 and 2 buttons, four player lights, and a labelled underside B-trigger panel (accessible on the front of the phone screen).
-
-Buttons support simultaneous touches: hold a direction and B together, or keep a button held with either of two fingers. Interrupted touches, lost pointer capture, switching away and leaving the room cancel held controls without firing a shot, clear pending swing data and centre aim. Motion input pauses while the page is hidden or unfocused and resumes with a fresh pointing centre when you return. Reconnecting starts with no buttons held. An intentional B release still shoots. Kart cancellation discards steering, braking and stored drift without awarding a boost.
-
-Sports cancel held charge and block when the dashboard loses focus, opens pairing, loses its connection, or the active remote disconnects. Releasing B afterward does not fire the cancelled shot; press B again to start a fresh charge. A lost dashboard connection also releases all racers' held controls.
-
-- **D-pad left/right:** choose a channel or adjust aim. **A / 2:** launch or play. **Home:** return to menu. **− / +:** previous/next channel; + starts a new match after the result.
-- **Point:** aim with orientation. **Hold B:** charge a shot; release to shoot in bowling/golf. In boxing B blocks and widens the timing window. **Shake / 1:** recenter. A uses the visible power meter, so motion is optional.
-- **Bluebird Lanes (bowling):** ten frames, two rolls per frame unless you strike. The second roll clears remaining pins. Strikes count the next two rolls; spares count the next roll. The tenth frame awards earned bonus rolls. Maximum 300. Scores include bonuses as subsequent rolls arrive.
-- **Sunbeam Rally (tennis):** time returns in the blue window and aim toward the moving opponent. Good contact wins a point; poor contact gives CPU the point. Uses 0/15/30/40, deuce and advantage; win by two points. First to two games ends each player's CPU match. Most games won ranks multiplayer results.
-- **Cloud Nine Ring (boxing):** land timed strikes on the moving target to damage the CPU opponent. Both start with 100 health; B blocks and reduces return damage. Six exchanges per round, up to three rounds, or a knockout. Solo results compare remaining health; multiplayer ranks damage dealt.
-- **Clover Greens (golf):** three par-3 holes. Aim slightly right and use about two-thirds power. The first stroke approaches the green; subsequent strokes putt. Good aim and power hole the ball; poor shots take extra strokes. Each hole has an eight-stroke limit. Fewest total strokes wins.
-- **Comet Ballpark (baseball):** three simplified batting innings, three strikes per out, three outs per inning. Hits advance runners one to four bases; runners crossing home score runs. Each hit is followed by a CPU fielding out to keep the innings short. Bases clear between innings. Most runs wins.
-
-These are arcade sports with original geometric canvas artwork and simplified physics. A cursor shows relative aim; the timing meter's blue band marks the ideal contact window. Results animate before the next shot or player. There is no audio or downloaded art.
-
-## Seabreeze Kart
-
-Choose the gold **Seabreeze Kart** channel. Up to four connected phones race at the same time on a shared overhead course. Unused positions get CPU racers. With no phones, the keyboard controls your kart against three CPUs.
-
-- Select **Seabreeze Circuit**, **Copper Canyon**, or **Starlight Ring** from the course selector. Changing courses starts a fresh race. Courses vary in length, road width, cornering force and palette.
-- After a three-second countdown, karts auto accelerate. Phone pointing or **left/right** steers across the road. **Down** brakes. Leaving the road slows the kart.
-- Hold **B** while steering to charge a drift; releasing it after a sustained drift gives a short boost. **1 / Recenter** clears phone steering offset.
-- Pickups are awarded at each yellow box marker when on the road and carrying no item. **A / Space / Enter** or **Use item** consumes it: **Boost** increases speed, **Shield** protects from attacks, **Spark** slows the nearest racer ahead unless shielded.
-- Finish three laps. Standings show position, lap, held item and finish time. The race ends when all human racers finish; remaining CPUs show “Did not finish.” Crossing times resolve close finishes. **New match** or remote **+** after the finish races again; **Home / Escape** returns to channels.
-- The keyboard controls the solo kart, otherwise an unfinished offline player's kart, otherwise the first unfinished human kart. Disconnecting releases that kart's held controls; automatic acceleration continues. Opening the pairing dialog pauses the race and releases steering/drift inputs.
-
-Kart racing uses an arcade lane-steering model on oval courses. It does not include Nintendo characters, tracks, game assets, music, vehicle customization, grand prix progression, split-screen perspectives or console-equivalent physics.
-
-For a solo keyboard demo, choose a channel before pairing phones. Use **left/right arrows** to aim, **A / Space** to play, **B** to charge/block, **1** to recenter, and **Escape / Home** to return. Enter launches the selected channel. The PC's on-screen Play button is another fallback.
-
-## Tests
-
-A job being marked finished means its run ended; it does not mean every requested requirement was met. Check the job's acceptance report and evidence for each requirement. A requirement marked `not_met` or `uncertain` is still outstanding and needs follow-up before treating the requested work as complete. Passing automated checks only confirms the checks that ran; it does not override unmet requirements or owner review.
-
-```powershell
+npm start            # the server alone, on http://localhost:3000
+npm run shortcut     # build the launcher and add shortcuts
+npm run package      # build dist\Living Room Sports and the portable zip
 npm test
 ```
 
-JARVIS runs `python check.py`, which invokes the same Node tests registered in its `TESTS` list. Tests cover HTTP asset boundaries, real WebSocket pairing for four phones and rejection of a fifth, reconnection slot reuse, input limits, rumble routing, malformed frames, sports rules and completed matches, bowling bonuses, three race courses, item effects, drift boosts, crossing order, four-player controls, client syntax, remote markup, local QR payload readback and error-correction syndromes, QR HTTP validation and dashboard image wiring. Minimal DOM harnesses run the actual dashboard launch, input, drawing, restart and home handlers, plus automatic joining, automatic sensor startup, iOS gesture permissions, permission denial, insecure/sensorless fallback, remote multi-touch, cancelled pointers, background sensor suppression, leaving and reconnecting. Real phone sensor permissions, gesture feel, vibration, visual appearance and LAN firewall behavior require a physical-device smoke test.
+The launcher (`launcher\LivingRoomSports.cs`) is compiled by the C# compiler that ships with Windows. It starts the server with no console window and opens the Wii Menu in its own Edge or Chrome window, with a separate browser profile. It stops the server when the window closes, unless a game is still running. It honours **Start in full screen** from Wii Options. It also brings Dolphin's window, and later the Wii Menu, to the front, which Windows does not otherwise let a background server do.
 
-The implementation uses original game names and locally drawn art. It is not an exact replica of Wii Sports or Mario Kart: game content, rendering, physics and many modes differ. Nintendo names identify the requested inspiration only. This project is not affiliated with Nintendo.
+A job being marked finished means its run ended; it does not mean every requested requirement was met. Check the job's acceptance report and evidence for each requirement. A requirement marked `not_met` or `uncertain` is still outstanding and needs follow-up before treating the requested work as complete. Passing automated checks only confirms the checks that ran; it does not override unmet requirements or owner review.
+
+JARVIS runs `python check.py`, which runs the same Node tests. They cover:
+
+- the console API, the setup steps and the Dolphin launch arguments, with a stand-in Dolphin;
+- writing and restoring Dolphin's controller settings;
+- how each kind of exit is reported;
+- the channel catalogue and the phone's game guide;
+- the phone controller page, run in a fake browser: motion maths, iPhone calibration, layouts, multi-touch and reconnecting;
+- the phone setup page and certificate download;
+- the launcher: options, start-up, `--focus`, closing the Wii Menu during a game, and the portable build running with its own Node.js;
+- the arcade's rules and pairing.
+
+[docs/verification.md](docs/verification.md) records what was checked by hand and what still needs a real phone, a DualSense and real discs.

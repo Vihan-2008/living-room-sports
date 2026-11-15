@@ -1,0 +1,166 @@
+/* The phone controller. The remote, Nunchuk and wheel are white plastic in any light; the page around
+   them follows the phone's light or dark setting. Sizes use container units so the same controller fits a
+   small phone, a large one, and a page the browser has turned sideways. */
+:root {
+  --page: #e3e7ea; --page-ink: #46525a; --muted: #7b868d;
+  --plastic: #fbfcfc; --plastic-shade: #e6eaec; --edge: #ccd3d7;
+  --key: #f2f4f5; --key-shade: #dde2e5; --key-edge: #c2c9ce; --key-ink: #69747b;
+  --wii: #34bdec; --wii-deep: #1897cf; --press: #d3eef9;
+  --player: #149ed4; --danger: #d14c43;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --page: #14181b; --page-ink: #dde3e7; --muted: #939ea5; --edge: #39434a; color-scheme: dark; }
+}
+html, body { margin: 0; height: 100%; background: var(--page); color: var(--page-ink); }
+body { overflow: hidden; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
+button { font: inherit; color: inherit; cursor: pointer; }
+[hidden] { display: none !important; }
+
+/* ---- Joining ------------------------------------------------------------------------------------ */
+.join { min-height: 100%; box-sizing: border-box; display: grid; place-content: center; justify-items: center; gap: 18px; padding: 28px 20px; overflow: auto; }
+.brand { margin: 0; font-weight: 600; font-size: 15px; color: var(--wii-deep); }
+.join-card { width: min(360px, 88vw); box-sizing: border-box; display: grid; gap: 14px; padding: 26px 22px 22px; border-radius: 24px; background: var(--plastic); color: #3d464c;
+  box-shadow: 0 0 0 1px var(--edge), 0 12px 32px rgba(20, 40, 50, .14); }
+.join-card h1 { margin: 0; font-size: 26px; font-weight: 600; }
+.lede { margin: 0; color: #6c777e; font-size: 15px; line-height: 1.45; }
+.join-card label { display: grid; gap: 6px; font-size: 14px; color: #59646b; }
+.join-card input { font: inherit; font-size: 20px; padding: 12px 14px; border-radius: 12px; border: 1.5px solid #cbd2d6; background: #fff; color: #2d3539; }
+.join-card input:focus { outline: none; border-color: var(--wii); box-shadow: 0 0 0 3px rgba(52, 189, 236, .25); }
+#code { letter-spacing: .16em; font-variant-numeric: tabular-nums; }
+.join-button { margin-top: 4px; border: 0; border-radius: 999px; padding: 15px; font-size: 19px; font-weight: 600; color: #fff;
+  background: linear-gradient(#55ccf3, var(--wii-deep)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 2px 0 rgba(0, 0, 0, .08); }
+.join-button:active { filter: brightness(.94); }
+.join-status { margin: 0; max-width: 330px; text-align: center; color: var(--muted); font-size: 15px; line-height: 1.4; }
+
+/* ---- The controller frame (turned by remote.js to match how the layout is held) ------------------ */
+.frame { position: fixed; left: 50%; top: 50%; width: 100vw; height: 100vh; transform: translate(-50%, -50%); }
+.controller { position: relative; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; container-type: size;
+  padding: max(10px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+  touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.controller button:focus { outline: none; }
+
+.bar { display: flex; align-items: center; gap: 12px; min-height: 44px; flex: none; }
+.player { flex: none; display: grid; place-items: center; min-width: 42px; height: 30px; padding: 0 10px; box-sizing: border-box; border-radius: 999px;
+  background: var(--player); color: #fff; font-weight: 700; font-size: 15px; }
+.now { flex: 1; min-width: 0; }
+.now p { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.now-name { font-weight: 600; font-size: 17px; }
+.now-detail { font-size: 13px; color: var(--muted); }
+.now-detail:empty { display: none; }
+.more { flex: none; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; }
+.more svg { width: 22px; height: 22px; fill: currentColor; }
+.more:active { background: rgba(127, 140, 148, .18); }
+
+.motion-line { flex: none; display: flex; align-items: center; gap: 10px; min-height: 30px; font-size: 13px; color: var(--muted); }
+.motion-state::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #b5bdc2; vertical-align: 1px; }
+.motion-state[data-state="active"]::before { background: #47c066; }
+.motion-state[data-state="denied"]::before, .motion-state[data-state="insecure"]::before, .motion-state[data-state="unavailable"]::before,
+.motion-state[data-state="permission"]::before { background: #e3a137; }
+.pill { flex: none; border: 0; border-radius: 999px; padding: 6px 12px; background: var(--wii-deep); color: #fff; font-size: 13px; font-weight: 600; text-decoration: none; }
+.slot-note { flex: none; margin: 2px 0 0; font-size: 13px; line-height: 1.4; color: var(--muted); }
+
+/* ---- Shared keys -------------------------------------------------------------------------------- */
+.remote button, .nunchuk button, .wheel button { border: 0; padding: 0; color: var(--key-ink); font-weight: 600; }
+.key-a, .key-num, .key-c, .key-small, .key-home {
+  aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle at 50% 32%, #fff, var(--key) 58%, var(--key-shade));
+  box-shadow: 0 0 0 1px var(--key-edge), 0 3px 4px rgba(0, 0, 0, .13); }
+.key-b, .key-z, .key-swing {
+  background: linear-gradient(#e9ecee, #d6dce0); box-shadow: 0 0 0 1px var(--key-edge), 0 3px 4px rgba(0, 0, 0, .12); }
+.controller .held { background: var(--press); color: var(--wii-deep); box-shadow: 0 0 0 2px var(--wii), 0 1px 2px rgba(0, 0, 0, .1); transform: translateY(1px); }
+small { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; color: var(--muted); }
+
+.dpad { --size: 150px; --size: min(150px, 22cqh); width: var(--size); height: var(--size); flex: none; display: grid; grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
+  filter: drop-shadow(0 0 .6px #9da7ad) drop-shadow(0 2px 2px rgba(0, 0, 0, .14)); }
+.dir { position: relative; background: var(--key); }
+.dir::after { content: ""; position: absolute; left: 50%; top: 50%; width: 15px; height: 12px; background: #a9b2b8;
+  clip-path: polygon(50% 0, 100% 100%, 0 100%); transform: translate(-50%, -50%) rotate(var(--turn, 0deg)); }
+.dpad .up { grid-area: 1 / 2; border-radius: 8px 8px 0 0; }
+.dpad .left { grid-area: 2 / 1; border-radius: 8px 0 0 8px; --turn: -90deg; }
+.dpad .right { grid-area: 2 / 3; border-radius: 0 8px 8px 0; --turn: 90deg; }
+.dpad .down { grid-area: 3 / 2; border-radius: 0 0 8px 8px; --turn: 180deg; }
+.dpad-hub { grid-area: 2 / 2; background: var(--key); }
+.dpad .dir.held { box-shadow: none; transform: none; }
+.dpad .dir.held::after { background: var(--wii-deep); }
+
+.small-keys { display: flex; align-items: center; gap: 26px; flex: none; }
+.key-small, .key-home { width: 44px; display: grid; place-items: center; }
+.key-small svg, .key-home svg { width: 18px; height: 18px; fill: none; stroke: var(--key-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.key-home { box-shadow: 0 0 0 1px var(--key-edge), 0 0 0 4px #ddf2fb, 0 2px 3px rgba(0, 0, 0, .12); }
+.key-home svg { width: 22px; height: 22px; stroke: var(--wii-deep); stroke-width: 2.2; }
+
+/* ---- Wii Remote ---------------------------------------------------------------------------------- */
+.remote { flex: 1; min-height: 0; width: min(100%, 300px); margin: 10px auto 0; box-sizing: border-box; padding: 16px 0 20px;
+  display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+  border-radius: 46px 46px 40px 40px; background: linear-gradient(90deg, var(--plastic-shade), var(--plastic) 20%, var(--plastic) 80%, var(--plastic-shade));
+  box-shadow: 0 0 0 1px var(--edge), 0 14px 32px rgba(20, 40, 50, .16); }
+.ir { flex: none; width: 46%; height: 14px; border-radius: 7px; background: linear-gradient(#2b3237, #11161a); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14); }
+.key-a { width: 92px; width: min(92px, 13cqh); flex: none; font-size: 34px; }
+.key-b { width: 62%; height: 62px; height: min(62px, 9cqh); flex: none; border-radius: 22px 22px 30px 30px; font-size: 24px; }
+.speaker { flex: none; width: 60px; height: 13px; background: radial-gradient(circle, #b6bec3 1.3px, transparent 1.7px) 0 0 / 8px 6.5px; }
+.number-keys { display: grid; gap: 14px; gap: min(14px, 2cqh); flex: none; }
+.key-num { width: 58px; width: min(58px, 8.4cqh); font-size: 22px; }
+.leds { display: flex; gap: 9px; flex: none; }
+.led { width: 9px; height: 5px; border-radius: 2px; background: #cdd3d7; }
+.led.on { background: #3ec3ff; box-shadow: 0 0 6px #3ec3ff; }
+
+/* ---- Nunchuk ------------------------------------------------------------------------------------- */
+.nunchuk, .wheel { display: none; }
+[data-layout="nunchuk"] .nunchuk { display: flex; }
+[data-layout="nunchuk"] .speaker, [data-layout="nunchuk"] .number-keys, [data-layout="nunchuk"] .leds { display: none; }
+[data-layout="nunchuk"] .remote { flex: 1.1; padding: 14px 0 16px; }
+[data-layout="nunchuk"] .dpad { --size: 118px; --size: min(118px, 16cqh); }
+[data-layout="nunchuk"] .key-a { width: 74px; width: min(74px, 10.5cqh); font-size: 28px; }
+[data-layout="nunchuk"] .key-b { height: 50px; height: min(50px, 7cqh); }
+.nunchuk { flex: .9; min-height: 0; width: min(100%, 330px); margin: 12px auto 0; box-sizing: border-box; padding: 14px 18px;
+  align-items: center; justify-content: space-between; border-radius: 36px;
+  background: linear-gradient(90deg, var(--plastic-shade), var(--plastic) 22%, var(--plastic) 78%, var(--plastic-shade));
+  box-shadow: 0 0 0 1px var(--edge), 0 10px 26px rgba(20, 40, 50, .14); }
+.stick { width: 138px; width: min(138px, 19cqh); aspect-ratio: 1; flex: none; display: grid; place-items: center; border-radius: 50%; touch-action: none;
+  background: radial-gradient(circle, #dce1e4 0 54%, #eceff1 55%); box-shadow: inset 0 2px 7px rgba(0, 0, 0, .18), 0 0 0 1px var(--key-edge); }
+.knob { width: 46%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 50% 34%, #fdfdfd, #ccd3d7); box-shadow: 0 3px 6px rgba(0, 0, 0, .25);
+  transition: transform .14s ease-out; }
+.stick.held .knob { transition: none; }
+.nunchuk-keys { display: grid; justify-items: center; gap: 10px; }
+.key-c { width: 50px; font-size: 18px; }
+.key-z { width: 104px; height: 54px; border-radius: 16px; font-size: 20px; }
+.key-swing { width: 104px; height: 42px; border-radius: 999px; font-size: 15px; }
+
+/* ---- Wii Wheel (the controller frame is landscape here) ------------------------------------------- */
+[data-layout="wheel"] .remote { display: none; }
+[data-layout="wheel"] .wheel { display: grid; }
+.wheel { flex: 1; min-height: 0; grid-template-columns: 1fr 1.1fr 1fr; align-items: center; gap: 12px; margin-top: 6px; }
+.wheel-side { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+.dpad-sideways { --size: 120px; --size: min(120px, 34cqh); }
+.key-drift { width: min(170px, 92%); height: 84px; height: min(84px, 23cqh); border-radius: 26px; font-size: 26px; display: grid; place-content: center; line-height: 1; }
+.wheel-middle { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.dial { position: relative; width: 132px; width: min(132px, 36cqh); aspect-ratio: 1; }
+.dial-face { position: absolute; inset: 0; box-sizing: border-box; border-radius: 50%; border: 12px solid #cfd5d9; transition: transform .06s linear;
+  background: radial-gradient(circle, #c3cacf 0 15%, transparent 16%),
+    linear-gradient(#c3cacf, #c3cacf) center / 100% 10px no-repeat,
+    linear-gradient(#c3cacf, #c3cacf) 50% 100% / 10px 50% no-repeat; }
+.dial-face::before { content: ""; position: absolute; left: 50%; top: -12px; width: 10px; height: 12px; margin-left: -5px; border-radius: 0 0 3px 3px; background: var(--wii); }
+.wheel-hint { margin: 0; max-width: 190px; text-align: center; font-size: 12px; line-height: 1.35; color: var(--muted); }
+.key-brake { width: 78px; width: min(78px, 21cqh); font-size: 22px; line-height: 1; }
+.key-gas { width: 118px; width: min(118px, 32cqh); font-size: 30px; line-height: 1; }
+.wheel .key-num { display: grid; place-content: center; }
+
+/* ---- Sheet ---------------------------------------------------------------------------------------- */
+.sheet { position: absolute; inset: 0; z-index: 2; display: grid; align-items: end; padding: 12px; box-sizing: border-box; background: rgba(18, 26, 31, .42); }
+.sheet-card { display: grid; gap: 10px; max-height: 100%; overflow: auto; padding: 18px; border-radius: 24px; background: var(--plastic); color: #3d464c;
+  box-shadow: 0 -6px 30px rgba(0, 0, 0, .2); }
+.sheet h2 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
+.steps { margin: 0 0 8px; padding-left: 22px; font-size: 14px; line-height: 1.45; color: #55606a; }
+.steps li + li { margin-top: 4px; }
+.sheet-action { border: 0; border-radius: 14px; padding: 15px; font-size: 16px; font-weight: 600; color: #3d464c; background: var(--key); box-shadow: 0 0 0 1px var(--key-edge); }
+.sheet-action:active { background: var(--key-shade); }
+.sheet-action:focus-visible { outline: 3px solid var(--wii); outline-offset: 2px; }
+.sheet-action.danger { color: var(--danger); }
+.sheet-action.danger.confirm { color: #fff; background: var(--danger); box-shadow: none; }
+.sheet-action.quiet { color: var(--wii-deep); background: transparent; box-shadow: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .knob, .dial-face { transition: none; }
+}

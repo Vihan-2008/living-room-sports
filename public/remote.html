@@ -1,1 +1,117 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1"><title>Your sports remote</title><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/style.css"></head><body class="remote-page"><main class="remote-wrap"><a href="/remote" class="remote-brand">living room <strong>sports</strong></a><form id="join-form"><h1>Ready, player?</h1><label>Your name<input id="name" maxlength="20" placeholder="Player" autocomplete="nickname"></label><label>Room code<input id="code" inputmode="numeric" pattern="[0-9]{6}" required maxlength="6"></label><button class="primary">Join the game</button></form><p id="remote-status" role="status">Connect to the same Wi-Fi as the dashboard.</p><section id="remote-controls" hidden><div class="remote-tools"><button id="enable-motion" class="primary" hidden>Allow motion</button><button id="recenter">Recenter</button></div><p id="sensor-status" class="small">Connecting motion…</p><div class="remote-body"><div class="remote-top"><span>SPORT REMOTE</span><span id="slot-label">P1</span></div><div class="dpad" aria-label="Directional pad"><button data-button="up" class="up" aria-label="Up">▲</button><button data-button="left" class="left" aria-label="Left">◀</button><span></span><button data-button="right" class="right" aria-label="Right">▶</button><button data-button="down" class="down" aria-label="Down">▼</button></div><button data-button="a" class="a-button" aria-label="A swing or select">A</button><div class="utility-buttons"><button data-button="minus" aria-label="Previous channel">−</button><button data-button="home" aria-label="Home">⌂</button><button data-button="plus" aria-label="Next channel">＋</button></div><div class="speaker" aria-hidden="true">••••<br>••••<br>••••</div><button data-button="one" class="number-button">1</button><button data-button="two" class="number-button">2</button><div class="leds" aria-label="Player indicator"><i></i><i></i><i></i><i></i></div><div class="underside"><span>Underside trigger</span><button data-button="b" class="b-button">B</button></div></div><p class="remote-hint">Point to aim · Swing to play<br>Hold B to charge, release to swing<br>Shake or tap 1 to recenter · 2 to play<br>Kart: point or D-pad to steer · B drift<br>A uses item · Down brakes</p><button id="leave">Leave room</button></section></main><script type="module" src="/remote.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#e3e7ea">
+<title>Living Room Sports controller</title>
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/remote.css">
+</head>
+<body>
+<main id="join-screen" class="join">
+  <p class="brand">Living Room Sports</p>
+  <form id="join-form" class="join-card">
+    <h1>Join the console</h1>
+    <p class="lede">Scan the code on the TV with this phone's camera, or type the room code it shows.</p>
+    <label>Your name<input id="name" maxlength="20" autocomplete="nickname" placeholder="Player" spellcheck="false"></label>
+    <label>Room code<input id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="off"></label>
+    <button class="join-button">Join</button>
+  </form>
+  <p id="remote-status" class="join-status" role="status">Connect this phone to the same Wi-Fi as the PC.</p>
+</main>
+
+<section id="remote-controls" class="frame" hidden>
+  <div id="controller" class="controller" data-layout="remote">
+    <header class="bar">
+      <span id="slot-label" class="player">P1</span>
+      <div class="now"><p id="activity-name" class="now-name">Wii Menu</p><p id="activity-detail" class="now-detail"></p></div>
+      <button id="more-button" class="more" type="button" aria-label="More" aria-expanded="false" aria-controls="sheet"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg></button>
+    </header>
+    <div class="motion-line">
+      <span id="sensor-status" class="motion-state">Motion is starting…</span>
+      <button id="enable-motion" class="pill" type="button" hidden>Turn on motion</button>
+      <a id="motion-setup" class="pill" href="/phone-setup" hidden>Turn on motion</a>
+    </div>
+    <p id="slot-note" class="slot-note" hidden></p>
+
+    <!-- The Wii Remote, held upright with its top edge toward the TV. -->
+    <div class="remote">
+      <span class="ir" aria-hidden="true"></span>
+      <div class="dpad" role="group" aria-label="Control pad">
+        <button data-button="up" class="dir up" type="button" aria-label="Up"></button>
+        <button data-button="left" class="dir left" type="button" aria-label="Left"></button>
+        <span class="dpad-hub" aria-hidden="true"></span>
+        <button data-button="right" class="dir right" type="button" aria-label="Right"></button>
+        <button data-button="down" class="dir down" type="button" aria-label="Down"></button>
+      </div>
+      <button data-button="a" class="key-a" type="button">A</button>
+      <button data-button="b" class="key-b" type="button">B</button>
+      <div class="small-keys">
+        <button data-button="minus" class="key-small" type="button" aria-label="Minus"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h10"/></svg></button>
+        <button data-button="home" class="key-home" type="button" aria-label="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5M6.5 10v8.5h11V10"/></svg></button>
+        <button data-button="plus" class="key-small" type="button" aria-label="Plus"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h10M10 5v10"/></svg></button>
+      </div>
+      <span class="speaker" aria-hidden="true"></span>
+      <div class="number-keys">
+        <button data-button="one" class="key-num" type="button">1</button>
+        <button data-button="two" class="key-num" type="button">2</button>
+      </div>
+      <div class="leds" aria-hidden="true"><i class="led"></i><i class="led"></i><i class="led"></i><i class="led"></i></div>
+    </div>
+
+    <!-- The Nunchuk, under the remote when the game needs one. -->
+    <div class="nunchuk">
+      <div id="stick" class="stick" role="group" aria-label="Control stick"><span id="stick-knob" class="knob" aria-hidden="true"></span></div>
+      <div class="nunchuk-keys">
+        <button data-button="c" class="key-c" type="button">C</button>
+        <button data-button="z" class="key-z" type="button">Z</button>
+        <button data-button="nswing" class="key-swing" type="button">Swing</button>
+      </div>
+    </div>
+
+    <!-- The Wii Wheel: the remote on its side, top edge to the left. The pad turns with it, so the arrow
+         that points left is the remote's Up. -->
+    <div class="wheel">
+      <div class="wheel-side">
+        <div class="dpad dpad-sideways" role="group" aria-label="Control pad: items">
+          <button data-button="right" class="dir up" type="button" aria-label="Item up"></button>
+          <button data-button="up" class="dir left" type="button" aria-label="Item left"></button>
+          <span class="dpad-hub" aria-hidden="true"></span>
+          <button data-button="down" class="dir right" type="button" aria-label="Item right"></button>
+          <button data-button="left" class="dir down" type="button" aria-label="Item down"></button>
+        </div>
+        <button data-button="b" class="key-b key-drift" type="button">B<small>Drift</small></button>
+      </div>
+      <div class="wheel-middle">
+        <div class="dial" aria-hidden="true"><span id="wheel-dial" class="dial-face"></span></div>
+        <p class="wheel-hint">Hold the phone like a steering wheel and tilt it to steer</p>
+        <div class="small-keys">
+          <button data-button="minus" class="key-small" type="button" aria-label="Minus"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h10"/></svg></button>
+          <button data-button="home" class="key-home" type="button" aria-label="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5M6.5 10v8.5h11V10"/></svg></button>
+          <button data-button="plus" class="key-small" type="button" aria-label="Plus, pause"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h10M10 5v10"/></svg></button>
+        </div>
+      </div>
+      <div class="wheel-side">
+        <button data-button="one" class="key-num key-brake" type="button">1<small>Brake</small></button>
+        <button data-button="two" class="key-num key-gas" type="button">2<small>Accelerate</small></button>
+      </div>
+    </div>
+
+    <div id="sheet" class="sheet" hidden>
+      <div class="sheet-card">
+        <section id="game-guide" hidden>
+          <h2>Getting to the game</h2>
+          <ol id="game-steps" class="steps"></ol>
+        </section>
+        <button id="recenter" class="sheet-action" type="button">Recenter the pointer</button>
+        <button id="quit-game" class="sheet-action danger" type="button" hidden>Quit the game</button>
+        <button id="leave" class="sheet-action" type="button">Leave the room</button>
+        <button id="sheet-close" class="sheet-action quiet" type="button">Back to the controller</button>
+      </div>
+    </div>
+  </div>
+</section>
+<script type="module" src="/remote.js"></script>
+</body>
+</html>

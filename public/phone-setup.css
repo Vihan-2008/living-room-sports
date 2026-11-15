@@ -1,0 +1,49 @@
+/* The phone setup page. Builds on the controller's stylesheet: its tokens, the brand line and the blue button. */
+body.setup-page { overflow: auto; }
+.setup { box-sizing: border-box; min-height: 100%; display: grid; justify-items: center; align-content: start; gap: 14px;
+  padding: max(28px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom)); }
+.setup-card { width: min(520px, 100%); box-sizing: border-box; display: grid; gap: 18px; padding: 26px 22px 22px; border-radius: 24px;
+  background: var(--plastic); color: #3d464c; box-shadow: 0 0 0 1px var(--edge), 0 12px 32px rgba(20, 40, 50, .14); }
+.setup-card h1 { margin: 0; font-size: 26px; font-weight: 600; }
+.setup-card .lede { font-size: 16px; }
+.setup-card b { font-weight: 600; color: #2d3539; }
+.note { margin: 0; padding: 10px 12px; border-radius: 12px; background: #fff3d1; color: #6b5310; font-size: 14px; line-height: 1.4; }
+
+/* Which phone: a two-way switch, set from the browser and changeable. */
+.choice { display: grid; grid-template-columns: 1fr 1fr; padding: 3px; border-radius: 999px; background: var(--key-shade); }
+.choice button { border: 0; border-radius: 999px; padding: 9px; background: none; color: var(--key-ink); font-size: 15px; font-weight: 600; }
+.choice button[aria-checked="true"] { background: #fff; color: var(--wii-deep); box-shadow: 0 1px 3px rgba(20, 40, 50, .16); }
+
+/* The steps are done in order, so they are numbered. */
+.steps { list-style: none; counter-reset: step; margin: 0; padding: 0; display: grid; gap: 16px; }
+.steps li { counter-increment: step; position: relative; display: grid; gap: 8px; padding-left: 42px; }
+.steps li::before { content: counter(step); position: absolute; left: 0; top: -3px; width: 30px; height: 30px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--press); color: var(--wii-deep); font-weight: 700; font-size: 15px; }
+.steps p { margin: 0; font-size: 16px; line-height: 1.45; }
+.steps .hint { color: #6c777e; font-size: 14px; }
+.action { justify-self: start; padding: 10px 16px; border-radius: 999px; background: #fff; color: var(--wii-deep); font-size: 15px; font-weight: 600;
+  text-decoration: none; box-shadow: inset 0 0 0 1.5px var(--wii); }
+.action:active { background: var(--press); }
+
+/* The answer: a light, a sentence, and what to do next. */
+.trust { display: grid; gap: 12px; padding: 14px 16px; border-radius: 16px; background: var(--key); }
+.trust p { margin: 0; display: flex; gap: 10px; align-items: baseline; font-size: 15px; line-height: 1.4; }
+.trust p::before { content: ""; flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--muted); transform: translateY(1px); }
+.trust[data-state="trusted"] p::before { background: #2fae5b; }
+.trust:is([data-state="untrusted"], [data-state="off"], [data-state="offline"]) p::before { background: #e0a21b; }
+.trust[data-state="checking"] p::before { animation: waiting .8s ease-in-out infinite alternate; }
+.trust .join-button { display: block; margin: 0; text-align: center; text-decoration: none; }
+.secondary { justify-self: start; border: 0; border-radius: 999px; padding: 9px 16px; background: #fff; color: var(--wii-deep); font-size: 15px; font-weight: 600;
+  box-shadow: inset 0 0 0 1.5px var(--edge); }
+.secondary:active { background: var(--press); }
+
+.about { width: min(520px, 100%); box-sizing: border-box; padding: 0 6px; color: var(--muted); font-size: 14px; line-height: 1.45; }
+.about summary { cursor: pointer; padding: 6px 0; color: var(--page-ink); font-weight: 600; }
+.about p { margin: 6px 0 0; }
+.about b { font-weight: 600; }
+.quiet-link { padding: 8px; color: var(--wii-deep); font-size: 15px; font-weight: 600; text-decoration: none; }
+.setup :focus-visible { outline: 3px solid var(--wii); outline-offset: 2px; }
+
+@keyframes waiting { to { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .trust[data-state="checking"] p::before { animation: none; } }
+@media (prefers-color-scheme: dark) { .quiet-link { color: var(--wii); } }
