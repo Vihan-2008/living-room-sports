@@ -63,6 +63,8 @@ For a solo keyboard demo, choose a channel before pairing phones. Use **left/rig
 
 ## Tests
 
+A job being marked finished means its run ended; it does not mean every requested requirement was met. Check the job's acceptance report and evidence for each requirement. A requirement marked `not_met` or `uncertain` is still outstanding and needs follow-up before treating the requested work as complete. Passing automated checks only confirms the checks that ran; it does not override unmet requirements or owner review.
+
 ```powershell
 npm test
 ```
