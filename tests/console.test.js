@@ -338,6 +338,7 @@ test('launch arguments, DSU entries and exit classification', () => {
   assert.deepEqual(args.slice(0, 5), ['-b', '-u', 'U', '-e', 'G.rvz']);
   assert.ok(args.includes('Dolphin.Display.Fullscreen=False') && args.includes('Dolphin.Interface.ConfirmStop=False') && args.includes('Dolphin.Core.SIDevice0=6'));
   assert.ok(args.includes('Graphics.Settings.BorderlessFullscreen=True'), 'full screen is a window that can move to another screen');
+  assert.ok(args.includes('Graphics.Settings.InternalResolution=0'), 'the game is drawn at its window\'s size, not the Wii\'s 640 × 528');
   assert.ok(args.includes('Dolphin.Interface.UsePanicHandlers=False'), 'warnings never stop the game with a pop-up');
   for (const item of ['Logger.Options.WriteToFile=True', 'Logger.Options.Verbosity=3', 'Logger.Logs.MASTER=True']) assert.ok(args.includes(item), `${item}: warnings reach the log`);
   for (let i = 5; i < args.length; i += 2) assert.equal(args[i], '-C', 'every setting is passed with -C, so none is saved to Dolphin\'s own files');
