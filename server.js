@@ -97,7 +97,9 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
   function activityFor(state) {
     if (!state?.dolphin?.running) return { mode: 'menu' };
     const { title, sport } = state.dolphin;
-    return { mode: 'game', title, sport, ...activityNeeds(title, sport), ...activityGuide(title, sport, state.settings?.menu?.lastMode), screens: state.screens?.length || 1 };
+    const screen = state.screens?.find(s => s.id === state.dolphin.screen)?.name || null;
+    return { mode: 'game', title, sport, ...activityNeeds(title, sport), ...activityGuide(title, sport, state.settings?.menu?.lastMode),
+      screens: state.screens?.length || 1, screen };
   }
   consoleApi?.onChange(state => {
     const next = activityFor(state);

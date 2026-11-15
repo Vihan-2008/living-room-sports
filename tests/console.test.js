@@ -16,7 +16,7 @@ import { createDsuServer, crc32, padFromPhone, PROTOCOL_VERSION } from '../conso
 import { createAuthority, issueServerCertificate, createCertificateStore, isPermittedAddress } from '../console/certs.js';
 import { candidatePaths, findDolphin, resolveUserDir, classifyExit, launchArgs, dsuEntries, createDolphinManager, asksForWiiMenu, followLog } from '../console/dolphin.js';
 import { createDisplays } from '../console/screens.js';
-import { fakeWindows, until, SECOND, MAIN_ONLY } from './fake-windows.js';
+import { fakeWindows, until, MAIN, SECOND, MAIN_ONLY } from './fake-windows.js';
 import { PHONE_TO_DSU, mkwRows, remoteRows } from '../public/bindings.js';
 import { SPORTS, ENTRY_COUNT, activityNeeds, activityGuide, MKW_MODES, sportById } from '../public/catalog.js';
 
@@ -464,13 +464,15 @@ test('Home › Wii Menu in the game closes it the way Quit does; a line left by 
 });
 
 test('a game opens on the screen chosen for it, checked again once Dolphin has gone full screen', async t => {
-  const windows = fakeWindows({ refuse: 1 });
-  const f = await dolphinFixture(t, { manager: { displays: createDisplays({ run: windows.run }), settleMs: 5 } });
+  const windows = fakeWindows({ refuse: 1 }), displays = createDisplays({ run: windows.run });
+  const f = await dolphinFixture(t, { manager: { displays, settleMs: 5 } });
   await f.settings.save({ launch: { screen: SECOND } });
+  await displays.list(); // as the console does when it starts
   await f.manager.launch({ title: 'mkw' });
+  assert.equal(f.manager.state().screen, SECOND, 'the game counts as on its screen from the start, so phones are not asked to recenter');
   await until(() => windows.window.x >= 1920);
-  await until(() => windows.calls.length >= 5);
-  assert.equal(windows.calls[0].LRS_WAIT, '20000', 'it waits for Dolphin to open the window');
+  await until(() => windows.calls.length >= 6);
+  assert.equal(windows.calls[1].LRS_WAIT, '20000', 'it waits for Dolphin to open the window');
   assert.deepEqual(windows.moves, ['2544,45,1312,1038', '2544,45,1312,1038'], 'moved again when the first move did not hold');
   assert.deepEqual(windows.window, { handle: '2428142', x: 2544, y: 45, width: 1312, height: 1038 });
 
@@ -479,6 +481,7 @@ test('a game opens on the screen chosen for it, checked again once Dolphin has g
   await g.manager.launch({ title: 'mkw' });
   await new Promise(resolve => setTimeout(resolve, 30));
   assert.equal(untouched.calls.length, 0, 'a game for the main screen is left where Dolphin puts it');
+  assert.equal(g.manager.state().screen, null, 'and where the screens have not been listed yet, no screen is guessed for the game');
 
   const unplugged = fakeWindows();
   const h = await dolphinFixture(t, { manager: { displays: createDisplays({ run: unplugged.run }), settleMs: 5 } });
@@ -497,9 +500,11 @@ test('a running game moves to the other screen and the next game opens there too
   await f.manager.moveTo('next');
   assert.deepEqual(windows.window, { handle: '2428142', x: 1920, y: -212, width: 2560, height: 1600 }, 'a full-screen game fills the 2560 × 1600 screen');
   assert.equal((await f.settings.load()).launch.screen, SECOND);
+  assert.equal(f.manager.state().screen, SECOND, 'the console knows where the game is now');
   await f.manager.moveTo('next');
   assert.deepEqual(windows.window, { handle: '2428142', x: 0, y: 0, width: 1920, height: 1080 });
   assert.equal((await f.settings.load()).launch.screen, 'main');
+  assert.equal(f.manager.state().screen, MAIN);
 
   const alone = await dolphinFixture(t, { manager: { displays: createDisplays({ run: fakeWindows({ screens: MAIN_ONLY }).run }) } });
   await alone.manager.launch({ title: 'mkw' });

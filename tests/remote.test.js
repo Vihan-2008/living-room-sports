@@ -450,3 +450,41 @@ test('in a game the sheet says Home › Wii Menu quits too, and offers the other
   app.activity(socket, { mode: 'menu' });
   assert.ok(app.$('move-game').hidden && app.$('quit-note').hidden, 'nothing about the game on the Wii Menu');
 });
+
+test('when the game moves to another screen the phone asks to be pointed at it, and Recenter lines the pointer up there', async () => {
+  const app = await remote(), socket = app.join(); await app.settle();
+  app.handlers.deviceorientation({ alpha: 90, beta: 20, gamma: 0 }); // recentred facing the main screen
+  const game = { mode: 'game', title: 'resort', sport: 'swordplay', layout: 'remote', nunchuk: false, name: 'Swordplay', path: [], screens: 2 };
+  app.activity(socket, { ...game, screen: null });
+  app.activity(socket, { ...game, screen: 'Second screen' });
+  assert.equal(app.$('aim-here').hidden, true, 'a game that opens on its screen asks nothing, even when that screen is known only later');
+  app.activity(socket, { ...game, screen: 'Main screen' });
+  assert.equal(app.$('aim-here').hidden, false);
+  assert.equal(app.$('sensor-status').textContent, 'Point at the main screen, then tap Recenter');
+  assert.equal(app.$('sensor-status').dataset.state, 'aim');
+
+  app.handlers.deviceorientation({ alpha: 50, beta: 8, gamma: 0 }); // turned 40° right and down, to face it
+  app.sendPad();
+  assert.deepEqual(pads(socket).at(-1).p, [1, -0.75], 'until then the pointer is off the edge of the game');
+  app.$('aim-here').onclick();
+  app.handlers.deviceorientation({ alpha: 50, beta: 8, gamma: 0 });
+  app.sendPad();
+  assert.deepEqual(pads(socket).at(-1).p, [0, 0], 'the middle of the new screen');
+  assert.equal(app.$('aim-here').hidden, true);
+  assert.equal(app.$('sensor-status').textContent, 'Motion on');
+
+  app.activity(socket, { ...game, screen: 'Second screen' });
+  app.$('more-button').onclick();
+  app.$('recenter').onclick();
+  assert.equal(app.$('aim-here').hidden, true, 'Recenter in the ⋯ sheet does the same');
+  app.activity(socket, { ...game, screen: 'Main screen' });
+  app.activity(socket, { mode: 'menu' });
+  assert.equal(app.$('aim-here').hidden, true, 'the game ended, so there is nothing to point at');
+  assert.equal(app.$('sensor-status').textContent, 'Motion on');
+
+  const menuOnly = await remote(), other = menuOnly.join(2, { inGames: false }); await menuOnly.settle();
+  menuOnly.handlers.deviceorientation({ alpha: 90, beta: 20, gamma: 0 });
+  menuOnly.activity(other, { ...game, screen: 'Main screen' });
+  menuOnly.activity(other, { ...game, screen: 'Second screen' });
+  assert.equal(menuOnly.$('aim-here').hidden, true, 'a phone that only works the Wii Menu is not playing, so it is not asked');
+});

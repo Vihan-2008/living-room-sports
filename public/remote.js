@@ -21,7 +21,9 @@ document.querySelectorAll('[data-device]').forEach(el => { el.textContent = DEVI
 const DIRECTIONS = new Set(['up', 'down', 'left', 'right']);
 
 let socket = null, joined = false, desired = false, reconnectTimer = null, padTimer = null, sensorTimer = null, quitTimer = null;
-let slot = null, activity = { mode: 'menu' }, layout = 'remote', motion = null, listening = false, permissionPending = false;
+let slot = null, playsGames = true, activity = { mode: 'menu' }, layout = 'remote', motion = null, listening = false, permissionPending = false;
+// The screen a running game moved to, until this device is pointed at it and recentred.
+let aimAt = null;
 let base = null, lastOrientation = null, lastOrientationAt = 0, lastRate = 0, pointer = { x: 0, y: 0 };
 let latest = { a: [0, 0, 1], g: [0, 0, 0] }, stick = [0, 0], stickPointer = null;
 let lastPointerSend = 0, lastSwing = 0, lastShake = 0, swing = 0, wakeLock = null;
@@ -79,7 +81,7 @@ function connect() {
 }
 
 function onJoined(msg) {
-  joined = true; slot = msg.slot;
+  joined = true; slot = msg.slot; playsGames = msg.inGames !== false;
   store.set('lrs-name', $('name').value.trim());
   $('join-screen').hidden = true; $('remote-controls').hidden = false;
   document.documentElement.style.setProperty('--player', msg.color);
@@ -122,6 +124,11 @@ $('leave').onclick = () => {
 
 // ---- Activity and layout ------------------------------------------------------------------------
 function applyActivity(next) {
+  // The pointer is measured from where the device faced when it was last recentred, so a game that moves to a
+  // screen somewhere else in the room leaves it aiming off the edge until the player recentres on the new one.
+  const moved = activity.mode === 'game' && next.mode === 'game' && !!activity.screen && !!next.screen && next.screen !== activity.screen;
+  if (next.mode !== 'game') aimAt = null;
+  else if (moved && playsGames && motion === 'active') { aimAt = next.screen; navigator.vibrate?.([30, 60, 30]); }
   activity = next.mode === 'game' ? next : { mode: 'menu' };
   const nextLayout = activity.mode !== 'game' ? 'remote' : activity.layout === 'wheel' ? 'wheel' : activity.nunchuk ? 'nunchuk' : 'remote';
   if (nextLayout !== layout) releaseAll();
@@ -136,6 +143,7 @@ function applyActivity(next) {
   $('move-game').hidden = activity.mode !== 'game' || !(activity.screens > 1);
   $('move-game').textContent = activity.screens > 2 ? 'Move the game to the next screen' : 'Move the game to the other screen';
   resetQuit();
+  showMotion();
   fit();
   startPad();
   reportStatus();
@@ -183,10 +191,12 @@ function reportStatus() { if (motion) send({ type: 'status', motion: motion === 
 
 function recenter() {
   base = null; pointer = { x: 0, y: 0 };
+  aimAt = null; showMotion();
   sendMenu({ shake: true });
   navigator.vibrate?.(20);
 }
 $('recenter').onclick = () => { recenter(); closeSheet(); };
+$('aim-here').onclick = recenter;
 
 function releaseAll() {
   pointer = { x: 0, y: 0 }; base = null; swing = 0;
@@ -292,10 +302,18 @@ async function keepAwake() {
 function setMotion(next) {
   if (motion === next) return;
   motion = next;
-  $('sensor-status').textContent = MOTION_TEXT[next];
-  $('sensor-status').dataset.state = next;
+  if (next !== 'active') aimAt = null;
+  showMotion();
   $('motion-setup').hidden = next !== 'insecure';
   reportStatus();
+}
+// The line under the bar: how motion is doing, or, after the game moves screens, where to point.
+function showMotion() {
+  if (!motion) return;
+  const status = $('sensor-status');
+  status.textContent = aimAt ? `Point at the ${aimAt.toLowerCase()}, then tap Recenter` : MOTION_TEXT[motion];
+  status.dataset.state = aimAt ? 'aim' : motion;
+  $('aim-here').hidden = !aimAt;
 }
 
 $('enable-motion').onclick = () => enableMotion(true);
