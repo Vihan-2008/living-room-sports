@@ -131,13 +131,13 @@ The PC creates the certificate itself. It is limited to private network addresse
 The **Living Room Sports** channel opens the original arcade. It runs in the window with no Dolphin or games, using the same phones.
 
 - **Bluebird Lanes (bowling):** ten frames with strikes, spares and tenth-frame bonus rolls; maximum 300.
-- **Sunbeam Rally (tennis):** time returns in the blue window and aim away from the opponent; games to two.
-- **Cloud Nine Ring (boxing):** timed strikes on a moving target; B blocks. Three rounds or a knockout.
+- **Sunbeam Rally (tennis):** time returns in the blue window and aim away from the opponent; first to two games. Alone you play the CPU. With two players it is singles; with three or four, two teams take turns to hit. A strong shot wins the point, a weaker one goes back over, and a miss loses it.
+- **Cloud Nine Ring (boxing):** timed punches at a moving target over three rounds, or until a knockout. Alone you box the CPU, and B blocks its counters. With two players you box each other, and with three or four, two tag teams. Holding B as you punch keeps your guard up: the next punch against you lands at half strength, but so does yours.
 - **Clover Greens (golf):** three par-3 holes; the first stroke approaches and later strokes putt.
 - **Comet Ballpark (baseball):** three short batting innings.
 - **Seabreeze Kart:** up to four phones race at once on three courses, with drift boosts and items (Boost, Shield, Spark). CPU racers fill the empty places.
 
-On a phone, point to aim, hold B to charge and release to shoot, and shake or press 1 to recentre. On the keyboard, use the arrows to aim, A or Space to play, B to charge or block, and Escape or Home to return. The sports take turns at frame, game, round, hole or inning boundaries. Karts all race at once.
+On a phone, point to aim, hold B to charge and release to shoot, and shake or press 1 to recentre. On the keyboard, use the arrows to aim, A or Space to play, B to charge or block, and Escape or Home to return. Bowling, golf and baseball take turns at frame, hole or inning boundaries. Tennis and boxing go shot by shot between the two sides. Karts all race at once.
 
 ## Building and tests
 

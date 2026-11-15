@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import vm from 'node:vm';
 import { sports, evaluate, timingAt } from '../public/games.js';
-import { bowlingScore, createSportsMatch, resolveShot, matchLabel } from '../public/sports-match.js';
+import { bowlingScore, createSportsMatch, resolveShot, matchLabel, matchResult } from '../public/sports-match.js';
 import { courses, createRace, raceInput, stepRace, standings } from '../public/kart.js';
 import { drawRace } from '../public/race-view.js';
 
@@ -75,9 +75,76 @@ test('baseball advances runners, scores runs and clears bases between innings', 
 test('every sport completes with one to four players without skipping anyone', () => {
   for (const id of ['bowling', 'tennis', 'boxing', 'golf', 'baseball']) for (let count = 1; count <= 4; count++) {
     const state = createSportsMatch(id, players(count)); let actions = 0;
-    while (!state.finished && actions++ < 500) shot(state, id === 'golf' ? 30 : id === 'baseball' ? 4 : 10);
+    const played = new Set();
+    while (!state.finished && actions++ < 500) { played.add(state.turn); shot(state, id === 'golf' ? 30 : id === 'baseball' ? 4 : 10); }
     assert.ok(state.finished, `${id}/${count}`); assert.ok(state.players.every(p => p.done));
+    assert.equal(played.size, count, `${id}/${count}: everyone plays`);
   }
+});
+test('one player plays tennis and boxing against the CPU; two or more play each other', () => {
+  for (const id of ['tennis', 'boxing']) {
+    assert.equal(createSportsMatch(id, players(1)).sides, undefined);
+    assert.deepEqual(createSportsMatch(id, players(2)).sides.map(s => s.members), [[0], [1]]);
+    assert.deepEqual(createSportsMatch(id, players(3)).sides.map(s => s.members), [[0, 1], [2]]);
+    assert.deepEqual(createSportsMatch(id, players(4)).sides.map(s => s.members), [[0, 1], [2, 3]]);
+  }
+  for (const id of ['bowling', 'golf', 'baseball']) assert.equal(createSportsMatch(id, players(2)).sides, undefined);
+});
+test('head-to-head tennis rallies, changes serve each game, plays deuce and names the winner', () => {
+  const state = createSportsMatch('tennis', players(2));
+  assert.equal(shot(state, 5), 'Good serve.'); assert.equal(state.turn, 1);
+  assert.equal(shot(state, 5), 'Shot.'); assert.equal(state.turn, 0);
+  assert.equal(shot(state, 9), 'Shot. Point to Player 1.'); assert.equal(state.turn, 0, 'The server serves the next point');
+  assert.equal(shot(state, 0), 'Fault! Point to Player 2.'); assert.equal(matchLabel(state), 'Games 0–0 · 15–15');
+  shot(state, 10); shot(state, 10);
+  assert.match(shot(state, 10), /^Ace! Point to Player 1\. Game to Player 1\.$/);
+  assert.equal(matchLabel(state), 'Games 1–0 · 0–0'); assert.equal(state.turn, 1, 'Player 2 serves the second game');
+  for (let i = 0; i < 3; i++) { shot(state, 10); shot(state, 0); }
+  assert.equal(matchLabel(state), 'Games 1–0 · Deuce');
+  shot(state, 10); assert.equal(matchLabel(state), 'Games 1–0 · Advantage Player 2');
+  shot(state, 0); assert.equal(matchLabel(state), 'Games 1–0 · Deuce');
+  shot(state, 10); shot(state, 10); assert.equal(matchLabel(state), 'Games 1–1 · 0–0');
+  assert.deepEqual(state.players.map(p => p.score), [1, 1]);
+  for (let i = 0; i < 4; i++) shot(state, 10);
+  assert.ok(state.finished); assert.deepEqual(state.players.map(p => p.score), [2, 1]);
+  assert.equal(matchResult(state, 'games'), 'Player 1 wins, 2 games to 1!');
+});
+test('head-to-head teams take turns within each side', () => {
+  const turns = (count, shots) => { const state = createSportsMatch('tennis', players(count)), seen = [];
+    for (let i = 0; i < shots; i++) { seen.push(state.turn); shot(state, 5); } return { state, seen }; };
+  assert.deepEqual(turns(4, 6).seen, [0, 2, 1, 3, 0, 2]);
+  assert.deepEqual(turns(3, 6).seen, [0, 2, 1, 2, 0, 2]);
+  const { state } = turns(3, 0);
+  for (let i = 0; i < 8; i++) shot(state, i % 2 ? 0 : 10);
+  assert.equal(matchLabel(state), 'Games 0–0 · Deuce');
+  shot(state, 10); assert.equal(matchLabel(state), 'Games 0–0 · Advantage Player 1 & Player 2');
+  assert.match(shot(state, 10), /Game to Player 1 & Player 2\.$/);
+  assert.equal(state.turn, 2, 'Player 3 serves the second game');
+  while (!state.finished) shot(state, 0);
+  assert.equal(matchResult(state, 'games'), 'Player 1 & Player 2 win, 2 games to 0!');
+});
+test('head-to-head boxing: guards halve punches both ways, rounds run out and knockouts end it', () => {
+  const bout = createSportsMatch('boxing', players(2));
+  assert.equal(shot(bout, 10), 'Shot. 30 damage.'); assert.equal(bout.sides[1].health, 70); assert.equal(bout.turn, 1);
+  assert.equal(shot(bout, 10, { block: true }), 'Shot. 15 damage.', 'A guarded punch lands at half strength');
+  assert.equal(shot(bout, 10), 'Shot. 15 damage.', 'and so does the next punch against the guarded boxer');
+  assert.equal(shot(bout, 0), 'Shot.'); assert.equal(bout.sides[1].guard, false);
+  assert.match(matchLabel(bout), /^Round 1 \/ 3 · Health: Player 1 85, Player 2 55$/);
+  shot(bout, 10); shot(bout, 0);
+  assert.equal(shot(bout, 10), 'Shot. 30 damage. Knockout! Player 1 wins the bout.');
+  assert.ok(bout.finished && bout.knockout); assert.deepEqual(bout.players.map(p => p.score), [85, 0]);
+  assert.equal(matchResult(bout, 'damage'), 'Knockout! Player 1 wins.');
+
+  const points = createSportsMatch('boxing', players(4));
+  shot(points, 1);
+  for (let i = 1; i < 12; i++) shot(points, 0);
+  assert.match(matchLabel(points), /^Round 2 \/ 3 · Health: Player 1 & Player 2 100, Player 3 & Player 4 97$/);
+  while (!points.finished) shot(points, 0);
+  assert.equal(points.punches, 36); assert.equal(points.knockout, false);
+  assert.equal(matchResult(points, 'damage'), 'Player 1 & Player 2 win on points, 100 health to 97.');
+  const level = createSportsMatch('boxing', players(2));
+  while (!level.finished) shot(level, 0);
+  assert.equal(matchResult(level, 'damage'), 'A draw, with 100 health each.');
 });
 test('race fills spare slots with CPU racers and accepts simultaneous slot-specific controls', () => {
   for (let count = 1; count <= 4; count++) {
@@ -147,7 +214,7 @@ async function dashboard({ href = 'http://localhost:3000/', config = { code: '12
   }
   for (const [, id] of html.matchAll(/id="([^"]+)"/g)) elements.set(id, element());
   let now = 1000;
-  const context = vm.createContext({ sports, evaluate, timingAt, createSportsMatch, resolveShot, matchLabel, createRace, raceInput, stepRace, standings, drawRace,
+  const context = vm.createContext({ sports, evaluate, timingAt, createSportsMatch, resolveShot, matchLabel, matchResult, createRace, raceInput, stepRace, standings, drawRace,
     document: { getElementById: id => { assert.ok(elements.has(id), `Missing element ${id}`); return elements.get(id); }, createElement: element, querySelectorAll: () => [], addEventListener: (name, callback) => { handlers[name] = callback; } },
     window: { addEventListener: (name, callback) => { handlers[name] = callback; } },
     location: new URL(href), URL,
@@ -297,6 +364,28 @@ test('solo tennis and boxing results correctly name the CPU winner after losses'
     assert.equal(app.run('finished'), true, id);
     assert.match(app.elements.get('result').textContent, /CPU wins/);
   }
+});
+
+test('two or more phones get head-to-head tennis and boxing with a row per side', async () => {
+  const app = await dashboard();
+  app.run("evaluate = () => ({ score: 10, text: 'Clean hit.' });");
+  for (const [id, count] of [['tennis', 2], ['tennis', 4], ['boxing', 3]]) {
+    app.run(`players = ${JSON.stringify(players(count).map(p => ({ ...p, connected: true })))}; start(sports.findIndex(s => s.id === '${id}'));`);
+    assert.equal(app.elements.get('game-help').textContent, sports.find(s => s.id === id).versusHelp);
+    const rows = app.elements.get('scores').children;
+    assert.equal(rows.length, 2, `${id}/${count}`);
+    const names = rows[0].children[0].children;
+    assert.equal(names.length, count > 2 ? 3 : 1, 'A side of two shows both players');
+    if (count > 2) assert.equal(names[1], ' & ');
+    assert.equal(rows[1].children[1].textContent, id === 'tennis' ? '0 games' : '100 health');
+    app.run('draw(7000);');
+    for (let i = 0; i < 40 && !app.run('finished'); i++) { app.run(`input({ slot: match[turn].slot, button: 'a', pressed: true });`); app.advance(); }
+    assert.equal(app.run('finished'), true, `${id}/${count}`);
+    assert.match(app.elements.get('result').textContent, id === 'tennis' ? /^Player 1.* wins?, 2 games to 1!$/ : /^Knockout! Player 1 & Player 2 win\.$/);
+    app.run('draw(9000); home();');
+  }
+  app.run("players = []; start(sports.findIndex(s => s.id === 'tennis'));");
+  assert.equal(app.elements.get('game-help').textContent, sports.find(s => s.id === 'tennis').help, 'One player still plays the CPU');
 });
 
 test('sports cancel held charge and block on blur and pairing without firing on release', async () => {

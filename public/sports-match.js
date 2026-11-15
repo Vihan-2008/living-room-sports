@@ -10,12 +10,48 @@ export function bowlingScore(frames) {
   });
   return score;
 }
+// Tennis and boxing are head to head when two or more play: two players face each other,
+// and three or four split into two sides (the first half of the players against the rest).
+// One player on their own plays the CPU.
+const HEAD_TO_HEAD = new Set(['tennis', 'boxing']);
+const ROUND_PUNCHES = 12; // six for each side
+const ROUNDS = 3;
+const GAMES_TO_WIN = 2;
+
 export function createSportsMatch(id, players) {
-  return { id, turn: 0, finished: false, players: players.map(p => ({ ...p, score: 0, done: false, frames: [[]], pins: 10, strokes: 0, hole: 1, distance: 150, points: [0, 0], games: [0, 0], health: [100, 100], punches: 0, inning: 1, outs: 0, strikes: 0, bases: [false, false, false] })) };
+  const state = { id, turn: 0, finished: false, players: players.map(p => ({ ...p, score: 0, done: false, frames: [[]], pins: 10, strokes: 0, hole: 1, distance: 150, points: [0, 0], games: [0, 0], health: [100, 100], punches: 0, inning: 1, outs: 0, strikes: 0, bases: [false, false, false] })) };
+  if (HEAD_TO_HEAD.has(id) && players.length > 1) {
+    const split = Math.ceil(players.length / 2);
+    state.sides = [0, 1].map(side => ({
+      members: state.players.map((_, i) => i).filter(i => (i < split) === (side === 0)),
+      next: 0, games: 0, points: 0, health: 100, guard: false
+    }));
+    state.players.forEach((p, i) => { p.side = i < split ? 0 : 1; });
+    Object.assign(state, { serving: 0, rally: 0, punches: 0, knockout: false });
+    if (id === 'boxing') for (const p of state.players) p.score = 100;
+    handTo(state, 0);
+  }
+  return state;
+}
+export const sideName = (state, side) => state.sides[side].members.map(i => state.players[i].name).join(' & ');
+// Gives the next shot to a side; its players take turns within it.
+function handTo(state, side) {
+  const s = state.sides[side];
+  state.hitting = side; state.turn = s.members[s.next];
+  s.next = (s.next + 1) % s.members.length;
 }
 export function matchLabel(state) {
   const p = state.players[state.turn];
   if (state.finished) return 'Match complete';
+  if (state.sides) {
+    const [a, b] = state.sides;
+    if (state.id === 'boxing') return `Round ${Math.min(ROUNDS, Math.floor(state.punches / ROUND_PUNCHES) + 1)} / ${ROUNDS} · Health: ${sideName(state, 0)} ${a.health}, ${sideName(state, 1)} ${b.health}`;
+    const point = n => [0, 15, 30, 40][Math.min(n, 3)];
+    const score = a.points >= 3 && b.points >= 3
+      ? a.points === b.points ? 'Deuce' : `Advantage ${sideName(state, a.points > b.points ? 0 : 1)}`
+      : `${point(a.points)}–${point(b.points)}`;
+    return `Games ${a.games}–${b.games} · ${score}`;
+  }
   if (state.id === 'bowling') return `Frame ${p.frames.length} / 10 · ${p.pins} pins standing`;
   if (state.id === 'golf') return `Hole ${p.hole} / 3 · Par 3 · ${p.distance} m · Stroke ${p.strokes + 1}`;
   if (state.id === 'tennis') {
@@ -28,6 +64,7 @@ export function matchLabel(state) {
 }
 export function resolveShot(state, result, { block = false } = {}) {
   if (state.finished) return '';
+  if (state.sides) return state.id === 'tennis' ? rally(state, result) : exchange(state, result, block);
   const p = state.players[state.turn]; let text = result.text, advance = true;
   if (state.id === 'bowling') {
     const frame = p.frames.at(-1), pins = Math.min(p.pins, result.score);
@@ -81,4 +118,73 @@ export function resolveShot(state, result, { block = false } = {}) {
     do { state.turn = (state.turn + 1) % state.players.length; } while (state.players[state.turn].done);
   }
   return text;
+}
+
+// A tennis point starts with a serve. A strong shot (8 or more) wins the point, a weaker one
+// goes over and the other side has to play it, and a miss loses the point.
+function rally(state, result) {
+  const side = state.hitting, serve = state.rally === 0, { score } = result;
+  if (score > 0 && score < 8) {
+    state.rally++; handTo(state, 1 - side);
+    return serve ? 'Good serve.' : result.text;
+  }
+  const winner = score ? side : 1 - side, [a, b] = state.sides;
+  let text = `${serve ? score ? 'Ace!' : 'Fault!' : result.text} Point to ${sideName(state, winner)}.`;
+  state.sides[winner].points++; state.rally = 0;
+  if (Math.max(a.points, b.points) >= 4 && Math.abs(a.points - b.points) >= 2) {
+    const game = a.points > b.points ? 0 : 1;
+    state.sides[game].games++; a.points = b.points = 0; state.serving = 1 - state.serving;
+    text += ` Game to ${sideName(state, game)}.`;
+  }
+  for (const p of state.players) p.score = state.sides[p.side].games;
+  if (Math.max(a.games, b.games) >= GAMES_TO_WIN) finish(state);
+  else handTo(state, state.serving);
+  return text;
+}
+// Boxers take turns to punch. Holding B keeps the puncher's guard up: their punch lands at
+// half strength, and so does the next punch against them.
+function exchange(state, result, block) {
+  const side = state.hitting, own = state.sides[side], other = state.sides[1 - side];
+  let damage = result.score * 3;
+  if (block) damage = Math.round(damage / 2);
+  if (other.guard) damage = Math.round(damage / 2);
+  other.health = Math.max(0, other.health - damage); own.guard = block; state.punches++;
+  for (const p of state.players) p.score = state.sides[p.side].health;
+  let text = damage ? `${result.text} ${damage} damage.` : result.text;
+  if (other.health === 0) {
+    state.knockout = true; finish(state);
+    return `${text} Knockout! ${sideName(state, side)} ${wins(state, side)} the bout.`;
+  }
+  if (state.punches >= ROUND_PUNCHES * ROUNDS) { finish(state); return `${text} That's the final bell.`; }
+  if (state.punches % ROUND_PUNCHES === 0) text += ` End of round ${state.punches / ROUND_PUNCHES}.`;
+  handTo(state, 1 - side);
+  return text;
+}
+const wins = (state, side) => state.sides[side].members.length > 1 ? 'win' : 'wins';
+function finish(state) { state.finished = true; for (const p of state.players) p.done = true; }
+
+// The line shown when a match is over.
+export function matchResult(state, unit) {
+  const players = state.players;
+  if (state.sides) {
+    const [a, b] = state.sides, name = side => `${sideName(state, side)} ${wins(state, side)}`;
+    if (state.id === 'tennis') {
+      const w = a.games > b.games ? 0 : 1;
+      return `${name(w)}, ${state.sides[w].games} games to ${state.sides[1 - w].games}!`;
+    }
+    if (a.health === b.health) return `A draw, with ${a.health} health each.`;
+    const w = a.health > b.health ? 0 : 1;
+    return state.knockout ? `Knockout! ${name(w)}.` : `${name(w)} on points, ${state.sides[w].health} health to ${state.sides[1 - w].health}.`;
+  }
+  if (players.length === 1 && state.id === 'tennis') {
+    const [you, cpu] = players[0].games;
+    return `${you > cpu ? 'You win' : 'CPU wins'}! Games ${you}–${cpu}`;
+  }
+  if (players.length === 1 && state.id === 'boxing') {
+    const [you, cpu] = players[0].health;
+    return `${you === cpu ? 'Draw' : you > cpu ? 'You win' : 'CPU wins'}! Health ${you}–${cpu}`;
+  }
+  const best = (state.id === 'golf' ? Math.min : Math.max)(...players.map(p => p.score));
+  const winners = players.filter(p => p.score === best);
+  return `${winners.map(p => p.name).join(' & ')} ${winners.length > 1 ? 'tie' : 'wins'}! ${best} ${unit}`;
 }
