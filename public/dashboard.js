@@ -13,15 +13,17 @@ function connect() {
   socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`);
   socket.onopen = () => { socket.send(JSON.stringify({ type: 'host' })); $('connection').textContent = 'Room online'; };
   socket.onclose = () => {
-    charging = false; block = false;
+    releaseSportsControls();
     if (race) for (const p of race.racers) if (!p.bot) raceInput(race, p.slot, { cancel: true });
     $('connection').textContent = 'Reconnecting…'; setTimeout(connect, 1500);
   };
   socket.onmessage = e => {
     const msg = JSON.parse(e.data);
     if (msg.type === 'roster') {
+      const activeRemoteLost = sportMatch && players.some(p => p.slot === match[turn].slot && p.connected) && !msg.players.some(p => p.slot === match[turn].slot && p.connected);
       players = msg.players;
-      if (race) for (const p of race.racers) if (p.slot > 0 && !players.some(q => q.slot === p.slot && q.connected)) p.controls = {};
+      if (race) for (const p of race.racers) if (!p.bot && p.slot > 0 && !players.some(q => q.slot === p.slot && q.connected)) raceInput(race, p.slot, { cancel: true });
+      if (activeRemoteLost) releaseSportsControls();
       renderPlayers(); if (game) renderScores();
     }
     if (msg.type === 'error') $('connection').textContent = msg.message;
@@ -169,10 +171,12 @@ function keyboardRacer() {
   const active = race?.racers.filter(p => !p.bot && p.finishTime === null) || [];
   return active.find(p => p.slot === 0) || active.find(p => !players.some(q => q.slot === p.slot && q.connected)) || active[0];
 }
+function releaseSportsControls() { charging = false; block = false; }
 window.addEventListener('blur', () => input({ slot: 0, cancel: true }));
 document.addEventListener('visibilitychange', () => { if (document.hidden) input({ slot: 0, cancel: true }); });
 for (const id of ['pair', 'pair-bottom']) $(id).onclick = () => {
-  if (race) for (const p of race.racers) p.controls = {};
+  releaseSportsControls();
+  if (race) for (const p of race.racers) if (!p.bot) raceInput(race, p.slot, { cancel: true });
   $('pair-dialog').showModal();
 };
 $('close-pair').onclick = () => $('pair-dialog').close();

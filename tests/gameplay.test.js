@@ -245,3 +245,81 @@ test('solo tennis and boxing results correctly name the CPU winner after losses'
     assert.match(app.elements.get('result').textContent, /CPU wins/);
   }
 });
+
+test('sports cancel held charge and block on blur and pairing without firing on release', async () => {
+  for (const id of ['bowling', 'golf', 'boxing']) for (const interrupt of ['blur', 'pair', 'pair-bottom']) {
+    const app = await dashboard();
+    app.run(`start(sports.findIndex(s => s.id === '${id}')); input({slot: 0, button: 'b', pressed: true});`);
+    assert.equal(app.run('charging && block'), true);
+    if (interrupt === 'blur') app.handlers.blur();
+    else { app.elements.get(interrupt).onclick(); app.elements.get('pair-dialog').close(); }
+    assert.equal(app.run('charging || block'), false, `${id}/${interrupt}`);
+    app.run("input({slot: 0, button: 'b', pressed: false});");
+    assert.equal(app.run('busy'), false, 'A cancelled charge must not shoot on release');
+    // A fresh press must still work after returning to the game.
+    app.run("input({slot: 0, button: 'b', pressed: true});");
+    assert.equal(app.run('charging && block'), true);
+    app.run("input({slot: 0, button: 'b', pressed: false});");
+    assert.equal(app.run('busy'), id !== 'boxing');
+  }
+});
+
+test('sports release held controls when the active remote or dashboard connection is lost', async () => {
+  const app = await dashboard();
+  const connected = players(2).map(p => ({ ...p, connected: true }));
+  app.run(`players = ${JSON.stringify(connected)}; start(sports.findIndex(s => s.id === 'bowling')); input({slot: 1, button: 'b', pressed: true});`);
+  const roster = list => app.run(`socket.onmessage({data: ${JSON.stringify(JSON.stringify({ type: 'roster', players: list }))}});`);
+  roster(connected.map(p => ({ ...p, connected: p.slot === 1 })));
+  assert.equal(app.run('charging && block'), true, 'Other players leaving must not cancel the active charge');
+  roster(connected.map(p => ({ ...p, connected: false })));
+  assert.equal(app.run('charging || block'), false);
+  assert.match(app.elements.get('turn').textContent, /offline: use keyboard/);
+  app.run("input({slot: 0, button: 'b', pressed: false});");
+  assert.equal(app.run('busy'), false);
+  app.run("input({slot: 0, button: 'b', pressed: true});");
+  roster(connected.map(p => ({ ...p, connected: p.slot === 2 })));
+  assert.equal(app.run('charging && block'), true, 'A roster update must preserve an offline keyboard charge');
+  app.run('socket.onclose();');
+  assert.equal(app.run('charging || block'), false);
+  app.run("input({slot: 0, button: 'b', pressed: false});");
+  assert.equal(app.run('busy'), false);
+});
+
+test('dashboard connection loss releases all racers held inputs', async () => {
+  const app = await dashboard();
+  app.run(`players = ${JSON.stringify(players(4).map(p => ({ ...p, connected: true })))}; start(0);`);
+  app.run("for (let slot = 1; slot <= 4; slot++) { input({slot, button: 'b', pressed: true}); input({slot, button: 'right', pressed: true}); } socket.onclose();");
+  assert.equal(app.run('race.racers.every(p => Object.keys(p.controls).length === 0)'), true);
+});
+
+test('race interruptions discard accumulated drift without awarding a release boost', async () => {
+  for (const interrupt of ['blur', 'hidden', 'pair', 'pair-bottom', 'connection', 'roster']) {
+    const app = await dashboard();
+    app.run(`players = ${JSON.stringify(players(2).map(p => ({ ...p, connected: true })))}; start(0); race.time = 1;
+      for (let slot = 1; slot <= 2; slot++) {
+        input({slot, button: 'b', pressed: true}); input({slot, button: 'right', pressed: true});
+        race.racers[slot - 1].drift = .9;
+      }`);
+    if (interrupt === 'blur') app.handlers.blur();
+    if (interrupt === 'hidden') { app.run('document.hidden = true'); app.handlers.visibilitychange(); }
+    if (interrupt === 'pair' || interrupt === 'pair-bottom') {
+      app.elements.get(interrupt).onclick(); app.elements.get('pair-dialog').close();
+    }
+    if (interrupt === 'connection') app.run('socket.onclose();');
+    if (interrupt === 'roster') {
+      const roster = players(2).map(p => ({ ...p, connected: p.slot === 2 }));
+      app.run(`socket.onmessage({data: ${JSON.stringify(JSON.stringify({ type: 'roster', players: roster }))}});`);
+    }
+    assert.equal(app.run('Object.keys(race.racers[0].controls).length'), 0, interrupt);
+    assert.equal(app.run('race.racers[0].drift'), 0, interrupt);
+    if (['blur', 'hidden', 'roster'].includes(interrupt)) {
+      assert.equal(app.run('race.racers[1].controls.b'), true, 'Unaffected remote keeps its controls');
+      assert.equal(app.run('race.racers[1].drift'), .9);
+    } else {
+      assert.equal(app.run('Object.keys(race.racers[1].controls).length'), 0, interrupt);
+      assert.equal(app.run('race.racers[1].drift'), 0, interrupt);
+    }
+    app.run('stepRace(race, .05);');
+    assert.equal(app.run('race.racers[0].boost'), 0, interrupt);
+  }
+});
