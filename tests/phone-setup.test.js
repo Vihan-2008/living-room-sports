@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { createApp } from '../server.js';
-import { platformOf, iosBrowser, controllerLink, checkTrust, TRUST_TEXT } from '../public/phone-setup.js';
+import { platformOf, iosBrowser, controllerLink, checkTrust, trustText } from '../public/phone-setup.js';
 
 const IPHONE_SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1';
 const IPHONE_CHROME = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1';
@@ -40,7 +40,8 @@ test('the trust check answers from what the phone can actually reach', async () 
   assert.deepEqual(await checkTrust({ location: http, fetch: async () => { throw new TypeError('offline'); } }), { state: 'offline' });
   assert.deepEqual(await checkTrust({ location: { protocol: 'https:', hostname: '192.168.1.40' }, fetch: config() }),
     { state: 'trusted', link: '/remote?code=123456' }, 'a page that loaded securely is already trusted');
-  for (const state of ['checking', 'trusted', 'untrusted', 'off', 'offline']) assert.ok(TRUST_TEXT[state]);
+  for (const state of ['checking', 'trusted', 'untrusted', 'off', 'offline']) assert.ok(trustText(state));
+  assert.equal(trustText('trusted', 'iPad'), 'This iPad trusts the PC. Motion controls are ready.', 'the answer names the device');
 });
 
 test('the page\'s script finds everything it needs, and both downloads are offered', async () => {
@@ -50,7 +51,8 @@ test('the page\'s script finds everything it needs, and both downloads are offer
   for (const [, id] of script.matchAll(/\$\('([^']+)'\)/g)) assert.ok(ids.has(id), `Missing element ${id}`);
   assert.match(html, /href="\/ca\.crt"/, 'iPhone: served as a certificate, so Safari offers to install it');
   assert.match(html, /href="\/ca\.crt\?save" download/, 'Android: saved as a file for Settings to install');
-  assert.match(html, /data-platform="ios"/); assert.match(html, /data-platform="android"/);
+  assert.match(html, /data-platform="ios"[^>]*>iPhone or iPad</, 'iPads follow the same steps as iPhones');
+  assert.match(html, /data-platform="android"/);
   const remote = await readFile(new URL('../public/remote.html', import.meta.url), 'utf8');
   assert.match(remote, /id="motion-setup"[^>]*href="\/phone-setup"|href="\/phone-setup"[^>]*id="motion-setup"/, 'the controller links here when motion is off');
 });

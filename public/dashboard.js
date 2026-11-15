@@ -1,7 +1,7 @@
 import { sports, evaluate, timingAt } from './games.js';
 import { createRace, raceInput, stepRace, standings } from './kart.js';
 import { drawRace } from './race-view.js';
-import { createSportsMatch, resolveShot, matchLabel } from './sports-match.js';
+import { createSportsMatch, resolveShot, matchLabel, matchResult } from './sports-match.js';
 const $ = id => document.getElementById(id);
 let players = [], selected = 0, game = null, match = [], turn = 0, finished = false;
 let aim = 0, power = .7, block = false, busy = false, charging = false, chargeStart = 0, advanceTimer;
@@ -58,13 +58,17 @@ function start(index) {
   lastFrame = null;
   turn = 0; finished = false; busy = false; shot = null; aim = 0; power = .7; charging = false; block = false;
   lastPlay = -Infinity;
-  $('menu').hidden = true; $('game').hidden = false; $('game-title').textContent = game.name; $('game-help').textContent = game.help;
+  $('menu').hidden = true; $('game').hidden = false; $('game-title').textContent = game.name;
+  $('game-help').textContent = sportMatch?.sides ? game.versusHelp : game.help;
   $('course-picker').hidden = !race; $('power-label').hidden = !!race; $('timing-label').hidden = !!race;
   $('action').textContent = race ? 'Use item (A)' : 'Play / Swing (A)';
   $('controls-help').textContent = race ? 'Auto accelerate. Point or use left/right to steer. B drifts, Down brakes, A uses an item. Escape / Home returns to the menu.' : 'Left/right aim. Space / A swings. Hold B to charge or block. Home / Escape returns to menu. Shake or 1 recenters.';
   $('result').textContent = ''; $('action').disabled = false; renderScores();
 }
 function home() { clearTimeout(advanceTimer); game = null; race = null; sportMatch = null; charging = false; block = false; $('menu').hidden = false; $('game').hidden = true; }
+// Home in a game returns to this channel list; Home on the list goes back to the Wii Menu,
+// like the HOME button on a Wii.
+function wiiMenu() { location.href = '/'; }
 function renderScores() {
   if (race) {
     $('round').textContent = race.finished ? 'Race complete' : race.time < 0 ? 'Get ready…' : 'Three-lap race';
@@ -83,10 +87,15 @@ function renderScores() {
   const offline = current.slot && !players.some(p => p.slot === current.slot && p.connected);
   $('turn').textContent = finished ? 'Good game, everyone!' : `${current.name}’s turn${offline ? ' (offline: use keyboard)' : ''}`;
   $('scores').replaceChildren();
-  for (const p of match) {
-    const row = document.createElement('p'), name = document.createElement('span'), score = document.createElement('strong');
-    name.textContent = `${p.slot ? 'P' + p.slot + ' ' : ''}${p.name}`; name.style.color = p.color; score.textContent = `${p.score} ${game.unit}`;
-    row.append(name, score); $('scores').append(row);
+  const label = p => { const name = document.createElement('span'); name.textContent = `${p.slot ? 'P' + p.slot + ' ' : ''}${p.name}`; name.style.color = p.color; return name; };
+  // Head to head, each side gets one row: its players and the side's games or health.
+  const rows = sportMatch.sides
+    ? sportMatch.sides.map(side => ({ members: side.members.map(i => match[i]), score: game.id === 'tennis' ? `${side.games} ${side.games === 1 ? 'game' : 'games'}` : `${side.health} health` }))
+    : match.map(p => ({ members: [p], score: `${p.score} ${game.unit}` }));
+  for (const { members, score } of rows) {
+    const row = document.createElement('p'), names = document.createElement('span'), value = document.createElement('strong');
+    members.forEach((p, i) => { if (i) names.append(' & '); names.append(label(p)); });
+    value.textContent = score; row.append(names, value); $('scores').append(row);
   }
 }
 function play(strength) {
@@ -105,15 +114,8 @@ function play(strength) {
   advanceTimer = setTimeout(() => {
     turn = sportMatch.turn; finished = sportMatch.finished;
     busy = false; shot = null; power = .7; aim = 0; block = false;
-    if (finished) {
-      const best = (game.id === 'golf' ? Math.min : Math.max)(...match.map(p => p.score));
-      $('result').textContent = `${match.filter(p => p.score === best).map(p => p.name).join(' & ')} ${match.filter(p => p.score === best).length > 1 ? 'tie' : 'wins'}! ${best} ${game.unit}`;
-      if (match.length === 1 && game.id === 'tennis') $('result').textContent = `${match[0].games[0] > match[0].games[1] ? 'You win' : 'CPU wins'}! Games ${match[0].games.join('–')}`;
-      if (match.length === 1 && game.id === 'boxing') {
-        const [you, cpu] = match[0].health;
-        $('result').textContent = `${you === cpu ? 'Draw' : you > cpu ? 'You win' : 'CPU wins'}! Health ${you}–${cpu}`;
-      }
-    } else { $('result').textContent = ''; $('action').disabled = false; }
+    if (finished) $('result').textContent = matchResult(sportMatch, game.unit);
+    else { $('result').textContent = ''; $('action').disabled = false; }
     renderScores();
   }, 2000);
 }
@@ -131,6 +133,7 @@ function input(m) {
   if ($('pair-dialog').open) { if (m.button === 'home' && m.pressed) $('pair-dialog').close(); return; }
   if (!game) {
     if (!m.pressed) return;
+    if (m.button === 'home') return wiiMenu();
     if (m.button === 'left' || m.button === 'minus') select(selected - 1);
     if (m.button === 'right' || m.button === 'plus') select(selected + 1);
     if (m.button === 'a' || m.button === 'two') start(selected);
@@ -166,6 +169,7 @@ for (const type of ['keydown', 'keyup']) document.addEventListener(type, e => {
   e.preventDefault(); input({ slot: 0, button, pressed: type === 'keydown' });
 });
 $('action').onclick = () => play(); $('home').onclick = home; $('restart').onclick = () => start(selected);
+$('wii-menu').onclick = wiiMenu;
 $('course').onchange = () => { if (race) start(selected); };
 function keyboardRacer() {
   const active = race?.racers.filter(p => !p.bot && p.finishTime === null) || [];
@@ -263,7 +267,8 @@ function draw(now) {
     const punch=shot?Math.sin(progress*Math.PI)*130:0;
     circle(340+aim*160,495-punch,56,'#f1786b');circle(650+aim*90,495-(block?70:0),56,'#f1786b');
     rect(300+aim*160,525-punch,80,45,'#fff');
-    const health = match[turn].health;
+    // Head to head, the left bar is the first side and the right bar the second.
+    const health = sportMatch.sides ? sportMatch.sides.map(side => side.health) : match[turn].health;
     rect(150,70,250,18,'#ffffff88');rect(600,70,250,18,'#ffffff88');
     rect(150,70,health[0]*2.5,18,'#61b995');rect(600,70,health[1]*2.5,18,'#ed8e78');
   } else if(game.id==='golf') {

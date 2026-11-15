@@ -1,6 +1,8 @@
-/* The phone controller. The remote, Nunchuk and wheel are white plastic in any light; the page around
-   them follows the phone's light or dark setting. Sizes use container units so the same controller fits a
-   small phone, a large one, and a page the browser has turned sideways. */
+/* The controller page. The remote, Nunchuk and wheel are white plastic in any light; the page around them
+   follows the device's light or dark setting. The controller follows the screen: upright, the remote stands
+   up; in landscape it lies across the screen, its top edge still the end that points at the TV. remote.js
+   sets data-shape (portrait or landscape) and --scale (1 on a phone, up to 1.75 on an iPad), and every size
+   is also capped in container units, so one controller fits a small phone, a large one and an iPad. */
 :root {
   --page: #e3e7ea; --page-ink: #46525a; --muted: #7b868d;
   --plastic: #fbfcfc; --plastic-shade: #e6eaec; --edge: #ccd3d7;
@@ -34,14 +36,41 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .join-button:active { filter: brightness(.94); }
 .join-status { margin: 0; max-width: 330px; text-align: center; color: var(--muted); font-size: 15px; line-height: 1.4; }
 
-/* ---- The controller frame (turned by remote.js to match how the layout is held) ------------------ */
-.frame { position: fixed; left: 50%; top: 50%; width: 100vw; height: 100vh; transform: translate(-50%, -50%); }
-.controller { position: relative; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; container-type: size;
-  padding: max(10px, env(safe-area-inset-top)) 14px max(14px, env(safe-area-inset-bottom));
+/* ---- The controller frame ------------------------------------------------------------------------ */
+/* remote.js sizes the frame to the page. It turns the frame only to draw the wheel across an upright screen,
+   or for a moment while the device is moving, and the safe-area insets turn with it. */
+.frame { position: fixed; left: 50%; top: 50%; width: 100vw; height: 100vh; transform: translate(-50%, -50%);
+  --safe-top: env(safe-area-inset-top, 0px); --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px); --safe-left: env(safe-area-inset-left, 0px); }
+.frame[data-turn="90"] { --safe-top: env(safe-area-inset-right, 0px); --safe-right: env(safe-area-inset-bottom, 0px);
+  --safe-bottom: env(safe-area-inset-left, 0px); --safe-left: env(safe-area-inset-top, 0px); }
+.frame[data-turn="-90"] { --safe-top: env(safe-area-inset-left, 0px); --safe-right: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-right, 0px); --safe-left: env(safe-area-inset-bottom, 0px); }
+.frame[data-turn="-180"] { --safe-top: env(safe-area-inset-bottom, 0px); --safe-right: env(safe-area-inset-left, 0px);
+  --safe-bottom: env(safe-area-inset-top, 0px); --safe-left: env(safe-area-inset-right, 0px); }
+
+.controller {
+  --scale: 1;
+  /* Key sizes: a phone's, times --scale, capped by the room there is. */
+  --pad: min(150px * var(--scale), 22cqh);
+  --a: min(92px * var(--scale), 13cqh);
+  --b: min(62px * var(--scale), 9cqh);
+  --num: min(58px * var(--scale), 8.4cqh);
+  --small: calc(44px * var(--scale));
+  --stick: min(138px * var(--scale), 19cqh);
+  position: relative; height: 100%; box-sizing: border-box; display: flex; flex-direction: column; container-type: size;
+  padding: max(10px, var(--safe-top)) max(14px, var(--safe-right)) max(14px, var(--safe-bottom)) max(14px, var(--safe-left));
   touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+.controller[data-shape="landscape"] {
+  --pad: min(150px * var(--scale), 44cqh, 19cqw);
+  --a: min(92px * var(--scale), 25cqh);
+  --b: min(58px * var(--scale), 15cqh);
+  --num: min(58px * var(--scale), 17cqh);
+  --small: min(44px * var(--scale), 13cqh); }
 .controller button:focus { outline: none; }
 
-.bar { display: flex; align-items: center; gap: 12px; min-height: 44px; flex: none; }
+/* The bar: player, what is on, motion, more. The motion line wraps under it when upright. */
+.bar { flex: none; display: flex; flex-wrap: wrap; align-items: center; column-gap: 12px; }
 .player { flex: none; display: grid; place-items: center; min-width: 42px; height: 30px; padding: 0 10px; box-sizing: border-box; border-radius: 999px;
   background: var(--player); color: #fff; font-weight: 700; font-size: 15px; }
 .now { flex: 1; min-width: 0; }
@@ -53,7 +82,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .more svg { width: 22px; height: 22px; fill: currentColor; }
 .more:active { background: rgba(127, 140, 148, .18); }
 
-.motion-line { flex: none; display: flex; align-items: center; gap: 10px; min-height: 30px; font-size: 13px; color: var(--muted); }
+.motion-line { order: 1; flex: 1 0 100%; display: flex; align-items: center; gap: 10px; min-height: 30px; font-size: 13px; color: var(--muted); }
+.controller[data-shape="landscape"] .motion-line { order: 0; flex: 0 1 auto; min-width: 0; }
+.controller[data-shape="landscape"] .motion-state { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .motion-state::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #b5bdc2; vertical-align: 1px; }
 .motion-state[data-state="active"]::before { background: #47c066; }
 .motion-state[data-state="denied"]::before, .motion-state[data-state="insecure"]::before, .motion-state[data-state="unavailable"]::before,
@@ -70,12 +101,12 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .key-b, .key-z, .key-swing {
   background: linear-gradient(#e9ecee, #d6dce0); box-shadow: 0 0 0 1px var(--key-edge), 0 3px 4px rgba(0, 0, 0, .12); }
 .controller .held { background: var(--press); color: var(--wii-deep); box-shadow: 0 0 0 2px var(--wii), 0 1px 2px rgba(0, 0, 0, .1); transform: translateY(1px); }
-small { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; color: var(--muted); }
+small { display: block; margin-top: 3px; font-size: calc(12px * var(--scale)); font-weight: 500; color: var(--muted); }
 
-.dpad { --size: 150px; --size: min(150px, 22cqh); width: var(--size); height: var(--size); flex: none; display: grid; grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
+.dpad { width: var(--pad); height: var(--pad); flex: none; display: grid; grid-template: 1fr 1fr 1fr / 1fr 1fr 1fr;
   filter: drop-shadow(0 0 .6px #9da7ad) drop-shadow(0 2px 2px rgba(0, 0, 0, .14)); }
 .dir { position: relative; background: var(--key); }
-.dir::after { content: ""; position: absolute; left: 50%; top: 50%; width: 15px; height: 12px; background: #a9b2b8;
+.dir::after { content: ""; position: absolute; left: 50%; top: 50%; width: calc(var(--pad) * .1); height: calc(var(--pad) * .08); background: #a9b2b8;
   clip-path: polygon(50% 0, 100% 100%, 0 100%); transform: translate(-50%, -50%) rotate(var(--turn, 0deg)); }
 .dpad .up { grid-area: 1 / 2; border-radius: 8px 8px 0 0; }
 .dpad .left { grid-area: 2 / 1; border-radius: 8px 0 0 8px; --turn: -90deg; }
@@ -85,72 +116,110 @@ small { display: block; margin-top: 3px; font-size: 12px; font-weight: 500; colo
 .dpad .dir.held { box-shadow: none; transform: none; }
 .dpad .dir.held::after { background: var(--wii-deep); }
 
-.small-keys { display: flex; align-items: center; gap: 26px; flex: none; }
-.key-small, .key-home { width: 44px; display: grid; place-items: center; }
-.key-small svg, .key-home svg { width: 18px; height: 18px; fill: none; stroke: var(--key-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
-.key-home { box-shadow: 0 0 0 1px var(--key-edge), 0 0 0 4px #ddf2fb, 0 2px 3px rgba(0, 0, 0, .12); }
-.key-home svg { width: 22px; height: 22px; stroke: var(--wii-deep); stroke-width: 2.2; }
+.small-keys { display: flex; align-items: center; gap: calc(var(--small) * .6); flex: none; }
+.key-small, .key-home { width: var(--small); display: grid; place-items: center; }
+.key-small svg, .key-home svg { width: 41%; height: 41%; fill: none; stroke: var(--key-ink); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.key-home { box-shadow: 0 0 0 1px var(--key-edge), 0 0 0 calc(var(--small) * .09) #ddf2fb, 0 2px 3px rgba(0, 0, 0, .12); }
+.key-home svg { width: 50%; height: 50%; stroke: var(--wii-deep); stroke-width: 2.2; }
 
-/* ---- Wii Remote ---------------------------------------------------------------------------------- */
-.remote { flex: 1; min-height: 0; width: min(100%, 300px); margin: 10px auto 0; box-sizing: border-box; padding: 16px 0 20px;
+/* ---- Wii Remote, upright ------------------------------------------------------------------------- */
+.remote { flex: 1; min-height: 0; width: min(100%, 300px * var(--scale)); margin: 10px auto 0; box-sizing: border-box;
+  padding: calc(16px * var(--scale)) 0 calc(20px * var(--scale));
   display: flex; flex-direction: column; align-items: center; justify-content: space-between;
-  border-radius: 46px 46px 40px 40px; background: linear-gradient(90deg, var(--plastic-shade), var(--plastic) 20%, var(--plastic) 80%, var(--plastic-shade));
+  border-radius: calc(46px * var(--scale)) calc(46px * var(--scale)) calc(40px * var(--scale)) calc(40px * var(--scale));
+  background: linear-gradient(90deg, var(--plastic-shade), var(--plastic) 20%, var(--plastic) 80%, var(--plastic-shade));
   box-shadow: 0 0 0 1px var(--edge), 0 14px 32px rgba(20, 40, 50, .16); }
-.ir { flex: none; width: 46%; height: 14px; border-radius: 7px; background: linear-gradient(#2b3237, #11161a); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14); }
-.key-a { width: 92px; width: min(92px, 13cqh); flex: none; font-size: 34px; }
-.key-b { width: 62%; height: 62px; height: min(62px, 9cqh); flex: none; border-radius: 22px 22px 30px 30px; font-size: 24px; }
-.speaker { flex: none; width: 60px; height: 13px; background: radial-gradient(circle, #b6bec3 1.3px, transparent 1.7px) 0 0 / 8px 6.5px; }
-.number-keys { display: grid; gap: 14px; gap: min(14px, 2cqh); flex: none; }
-.key-num { width: 58px; width: min(58px, 8.4cqh); font-size: 22px; }
-.leds { display: flex; gap: 9px; flex: none; }
-.led { width: 9px; height: 5px; border-radius: 2px; background: #cdd3d7; }
+.ir { flex: none; width: 46%; height: calc(14px * var(--scale)); border-radius: 999px; background: linear-gradient(#2b3237, #11161a); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .14); }
+.key-a { width: var(--a); flex: none; font-size: calc(var(--a) * .37); }
+.key-b { width: 62%; height: var(--b); flex: none; border-radius: 22px 22px 30px 30px; font-size: calc(var(--b) * .39); }
+.speaker { flex: none; width: calc(60px * var(--scale)); height: calc(13px * var(--scale)); background: radial-gradient(circle, #b6bec3 1.3px, transparent 1.7px) 0 0 / 8px 6.5px; }
+.number-keys { display: grid; gap: min(14px * var(--scale), 2cqh); flex: none; }
+.key-num { width: var(--num); font-size: calc(var(--num) * .38); }
+.leds { display: flex; gap: calc(9px * var(--scale)); flex: none; }
+.led { width: calc(9px * var(--scale)); height: calc(5px * var(--scale)); border-radius: 2px; background: #cdd3d7; }
 .led.on { background: #3ec3ff; box-shadow: 0 0 6px #3ec3ff; }
 
-/* ---- Nunchuk ------------------------------------------------------------------------------------- */
+/* ---- Wii Remote, in landscape: laid across, IR window on the top edge, LEDs on the bottom one ---------
+   Left to right: the pad under the left thumb, − Home + over the speaker, A over B under the right thumb,
+   then 1 over 2. */
+.controller[data-shape="landscape"] .remote {
+  position: relative; width: 100%; max-height: calc(380px * var(--scale)); margin: auto 0;
+  padding: calc(34px * var(--scale)) 3cqw calc(28px * var(--scale));
+  display: grid; grid-template-areas: "pad small a num" "pad speaker b num"; grid-template-rows: 1fr 1fr;
+  justify-content: space-evenly; justify-items: center; column-gap: 2cqw; row-gap: 3cqh;
+  border-radius: min(46px * var(--scale), 14cqh);
+  background: linear-gradient(var(--plastic-shade), var(--plastic) 18%, var(--plastic) 82%, var(--plastic-shade)); }
+.controller[data-shape="landscape"] .remote > .dpad { grid-area: pad; align-self: center; }
+.controller[data-shape="landscape"] .remote > .small-keys { grid-area: small; align-self: end; }
+.controller[data-shape="landscape"] .remote > .speaker { grid-area: speaker; align-self: start; }
+.controller[data-shape="landscape"] .remote > .key-a { grid-area: a; align-self: end; }
+.controller[data-shape="landscape"] .remote > .key-b { grid-area: b; align-self: start; width: calc(var(--a) * 1.25); }
+.controller[data-shape="landscape"] .remote > .number-keys { grid-area: num; align-self: center; }
+.controller[data-shape="landscape"] .remote > .ir { position: absolute; top: calc(12px * var(--scale)); left: 50%; width: min(24%, 200px * var(--scale)); transform: translateX(-50%); }
+.controller[data-shape="landscape"] .remote > .leds { position: absolute; bottom: calc(11px * var(--scale)); left: 50%; transform: translateX(-50%); }
+
+/* ---- Nunchuk: under the remote when upright, to its left in landscape ------------------------------ */
 .nunchuk, .wheel { display: none; }
 [data-layout="nunchuk"] .nunchuk { display: flex; }
 [data-layout="nunchuk"] .speaker, [data-layout="nunchuk"] .number-keys, [data-layout="nunchuk"] .leds { display: none; }
-[data-layout="nunchuk"] .remote { flex: 1.1; padding: 14px 0 16px; }
-[data-layout="nunchuk"] .dpad { --size: 118px; --size: min(118px, 16cqh); }
-[data-layout="nunchuk"] .key-a { width: 74px; width: min(74px, 10.5cqh); font-size: 28px; }
-[data-layout="nunchuk"] .key-b { height: 50px; height: min(50px, 7cqh); }
-.nunchuk { flex: .9; min-height: 0; width: min(100%, 330px); margin: 12px auto 0; box-sizing: border-box; padding: 14px 18px;
-  align-items: center; justify-content: space-between; border-radius: 36px;
+.controller[data-layout="nunchuk"] {
+  --pad: min(118px * var(--scale), 16cqh);
+  --a: min(74px * var(--scale), 10.5cqh);
+  --b: min(50px * var(--scale), 7cqh); }
+[data-layout="nunchuk"] .remote { flex: 1.1; padding: calc(14px * var(--scale)) 0 calc(16px * var(--scale)); }
+.nunchuk { flex: .9; min-height: 0; width: min(100%, 330px * var(--scale)); margin: 12px auto 0; box-sizing: border-box; padding: 14px calc(18px * var(--scale));
+  align-items: center; justify-content: space-between; border-radius: calc(36px * var(--scale));
   background: linear-gradient(90deg, var(--plastic-shade), var(--plastic) 22%, var(--plastic) 78%, var(--plastic-shade));
   box-shadow: 0 0 0 1px var(--edge), 0 10px 26px rgba(20, 40, 50, .14); }
-.stick { width: 138px; width: min(138px, 19cqh); aspect-ratio: 1; flex: none; display: grid; place-items: center; border-radius: 50%; touch-action: none;
+.stick { width: var(--stick); aspect-ratio: 1; flex: none; display: grid; place-items: center; border-radius: 50%; touch-action: none;
   background: radial-gradient(circle, #dce1e4 0 54%, #eceff1 55%); box-shadow: inset 0 2px 7px rgba(0, 0, 0, .18), 0 0 0 1px var(--key-edge); }
 .knob { width: 46%; aspect-ratio: 1; border-radius: 50%; background: radial-gradient(circle at 50% 34%, #fdfdfd, #ccd3d7); box-shadow: 0 3px 6px rgba(0, 0, 0, .25);
   transition: transform .14s ease-out; }
 .stick.held .knob { transition: none; }
-.nunchuk-keys { display: grid; justify-items: center; gap: 10px; }
-.key-c { width: 50px; font-size: 18px; }
-.key-z { width: 104px; height: 54px; border-radius: 16px; font-size: 20px; }
-.key-swing { width: 104px; height: 42px; border-radius: 999px; font-size: 15px; }
+.nunchuk-keys { display: grid; justify-items: center; gap: calc(10px * var(--scale)); }
+.key-c { width: calc(50px * var(--scale)); font-size: calc(18px * var(--scale)); }
+.key-z { width: calc(104px * var(--scale)); height: calc(54px * var(--scale)); border-radius: calc(16px * var(--scale)); font-size: calc(20px * var(--scale)); }
+.key-swing { width: calc(104px * var(--scale)); height: calc(42px * var(--scale)); border-radius: 999px; font-size: calc(15px * var(--scale)); }
 
-/* ---- Wii Wheel (the controller frame is landscape here) ------------------------------------------- */
-[data-layout="wheel"] .remote { display: none; }
-[data-layout="wheel"] .wheel { display: grid; }
+.controller[data-shape="landscape"][data-layout="nunchuk"] {
+  --pad: min(118px * var(--scale), 34cqh, 15cqw);
+  --a: min(74px * var(--scale), 21cqh);
+  --b: min(50px * var(--scale), 13cqh);
+  --small: min(44px * var(--scale), 12cqh);
+  --stick: min(138px * var(--scale), 42cqh, 17cqw);
+  display: grid; grid-template-columns: 1fr 1.3fr; grid-template-rows: auto auto minmax(0, 1fr); column-gap: 2.5cqw; }
+.controller[data-shape="landscape"][data-layout="nunchuk"] > :is(.bar, .slot-note) { grid-column: 1 / -1; }
+.controller[data-shape="landscape"][data-layout="nunchuk"] > :is(.nunchuk, .remote) { grid-row: 3; align-self: center; width: 100%; height: min(100%, 360px * var(--scale)); max-height: none; margin: 0; }
+.controller[data-shape="landscape"][data-layout="nunchuk"] > .nunchuk { grid-column: 1; justify-content: space-evenly; }
+.controller[data-shape="landscape"][data-layout="nunchuk"] > .remote { grid-column: 2; grid-template-areas: "pad a" "pad b" "small small"; grid-template-rows: 1fr 1fr auto; }
+
+/* ---- Wii Wheel: always wide, drawn across an upright screen -------------------------------------- */
+.controller[data-layout="wheel"] > .remote { display: none; } /* outranks the landscape remote's grid */
+.controller[data-layout="wheel"] > .wheel { display: grid; }
 .wheel { flex: 1; min-height: 0; grid-template-columns: 1fr 1.1fr 1fr; align-items: center; gap: 12px; margin-top: 6px; }
-.wheel-side { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
-.dpad-sideways { --size: 120px; --size: min(120px, 34cqh); }
-.key-drift { width: min(170px, 92%); height: 84px; height: min(84px, 23cqh); border-radius: 26px; font-size: 26px; display: grid; place-content: center; line-height: 1; }
-.wheel-middle { display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.dial { position: relative; width: 132px; width: min(132px, 36cqh); aspect-ratio: 1; }
-.dial-face { position: absolute; inset: 0; box-sizing: border-box; border-radius: 50%; border: 12px solid #cfd5d9; transition: transform .06s linear;
+.wheel-side { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: calc(16px * var(--scale)); }
+.dpad-sideways { --pad: min(120px * var(--scale), 34cqh); }
+.key-drift { width: min(170px * var(--scale), 92%); height: min(84px * var(--scale), 23cqh); border-radius: calc(26px * var(--scale));
+  font-size: min(26px * var(--scale), 7cqh); display: grid; place-content: center; line-height: 1; }
+.wheel-middle { display: flex; flex-direction: column; align-items: center; gap: calc(10px * var(--scale)); }
+.dial { --ring: min(12px * var(--scale), 3.3cqh); position: relative; width: min(132px * var(--scale), 36cqh); aspect-ratio: 1; }
+.dial-face { position: absolute; inset: 0; box-sizing: border-box; border-radius: 50%; border: var(--ring) solid #cfd5d9; transition: transform .06s linear;
   background: radial-gradient(circle, #c3cacf 0 15%, transparent 16%),
-    linear-gradient(#c3cacf, #c3cacf) center / 100% 10px no-repeat,
-    linear-gradient(#c3cacf, #c3cacf) 50% 100% / 10px 50% no-repeat; }
-.dial-face::before { content: ""; position: absolute; left: 50%; top: -12px; width: 10px; height: 12px; margin-left: -5px; border-radius: 0 0 3px 3px; background: var(--wii); }
-.wheel-hint { margin: 0; max-width: 190px; text-align: center; font-size: 12px; line-height: 1.35; color: var(--muted); }
-.key-brake { width: 78px; width: min(78px, 21cqh); font-size: 22px; line-height: 1; }
-.key-gas { width: 118px; width: min(118px, 32cqh); font-size: 30px; line-height: 1; }
+    linear-gradient(#c3cacf, #c3cacf) center / 100% calc(var(--ring) * .85) no-repeat,
+    linear-gradient(#c3cacf, #c3cacf) 50% 100% / calc(var(--ring) * .85) 50% no-repeat; }
+.dial-face::before { content: ""; position: absolute; left: 50%; top: calc(var(--ring) * -1); width: calc(var(--ring) * .85); height: var(--ring);
+  transform: translateX(-50%); border-radius: 0 0 3px 3px; background: var(--wii); }
+.wheel-hint { margin: 0; max-width: calc(190px * var(--scale)); text-align: center; font-size: calc(12px * var(--scale)); line-height: 1.35; color: var(--muted); }
+.key-brake { width: min(78px * var(--scale), 21cqh); font-size: min(22px * var(--scale), 6cqh); line-height: 1; }
+.key-gas { width: min(118px * var(--scale), 32cqh); font-size: min(30px * var(--scale), 8cqh); line-height: 1; }
 .wheel .key-num { display: grid; place-content: center; }
 
 /* ---- Sheet ---------------------------------------------------------------------------------------- */
-.sheet { position: absolute; inset: 0; z-index: 2; display: grid; align-items: end; padding: 12px; box-sizing: border-box; background: rgba(18, 26, 31, .42); }
-.sheet-card { display: grid; gap: 10px; max-height: 100%; overflow: auto; padding: 18px; border-radius: 24px; background: var(--plastic); color: #3d464c;
-  box-shadow: 0 -6px 30px rgba(0, 0, 0, .2); }
+.sheet { position: absolute; inset: 0; z-index: 2; display: grid; align-items: end; justify-items: center; box-sizing: border-box;
+  padding: max(12px, var(--safe-top)) max(12px, var(--safe-right)) max(12px, var(--safe-bottom)) max(12px, var(--safe-left));
+  background: rgba(18, 26, 31, .42); }
+.sheet-card { width: min(100%, 460px); box-sizing: border-box; display: grid; gap: 10px; max-height: 100%; overflow: auto; padding: 18px; border-radius: 24px;
+  background: var(--plastic); color: #3d464c; box-shadow: 0 -6px 30px rgba(0, 0, 0, .2); }
 .sheet h2 { margin: 0 0 6px; font-size: 16px; font-weight: 600; }
 .steps { margin: 0 0 8px; padding-left: 22px; font-size: 14px; line-height: 1.45; color: #55606a; }
 .steps li + li { margin-top: 4px; }

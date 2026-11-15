@@ -1,5 +1,6 @@
-// The phone setup page: walks a phone through trusting the PC's certificate, so the controller page can be
-// served securely and the browser lets it read the motion sensors. It then checks that the trust took.
+// The phone setup page: walks a phone or iPad through trusting the PC's certificate, so the controller page
+// can be served securely and the browser lets it read the motion sensors. It then checks that the trust took.
+import { deviceKind } from './phone-motion.js';
 
 const CHECK_TIMEOUT_MS = 2500;
 
@@ -39,13 +40,16 @@ export async function checkTrust({ fetch, location, clientId = null, timeout = C
   } finally { clearTimeout(timer); }
 }
 
-export const TRUST_TEXT = {
-  checking: 'Checking whether this phone trusts the PC…',
-  trusted: 'This phone trusts the PC. Motion controls are ready.',
-  untrusted: 'This phone does not trust the PC yet.',
-  off: 'The PC is not offering a secure connection right now. Restart Living Room Sports on the PC, then check again.',
-  offline: 'This phone cannot reach the PC. Make sure it is on the same Wi-Fi, then check again.'
-};
+// What the page says for each answer, naming the device: phone, iPad or tablet.
+export function trustText(state, device = 'phone') {
+  return {
+    checking: `Checking whether this ${device} trusts the PC…`,
+    trusted: `This ${device} trusts the PC. Motion controls are ready.`,
+    untrusted: `This ${device} does not trust the PC yet.`,
+    off: 'The PC is not offering a secure connection right now. Restart Living Room Sports on the PC, then check again.',
+    offline: `This ${device} cannot reach the PC. Make sure it is on the same Wi-Fi, then check again.`
+  }[state];
+}
 
 if (typeof document !== 'undefined') startPage();
 
@@ -53,6 +57,8 @@ function startPage() {
   const $ = id => document.getElementById(id);
   const userAgent = navigator.userAgent;
   const platform = platformOf(userAgent, navigator.maxTouchPoints);
+  const device = deviceKind(userAgent, navigator.maxTouchPoints);
+  document.querySelectorAll('[data-device]').forEach(el => { el.textContent = device; });
   let clientId = null;
   try { clientId = localStorage.getItem('lrs-client'); } catch {}
 
@@ -66,14 +72,14 @@ function startPage() {
   choose(platform === 'android' ? 'android' : 'ios');
 
   const other = platform === 'ios' && iosBrowser(userAgent);
-  if (other) { $('safari-note').textContent = `Open this page in Safari to install the certificate. ${other} on iPhone cannot install one.`; $('safari-note').hidden = false; }
+  if (other) { $('safari-note').textContent = `Open this page in Safari to install the certificate. ${other} on ${device === 'iPad' ? 'iPad' : 'iPhone'} cannot install one.`; $('safari-note').hidden = false; }
   $('elsewhere').hidden = platform !== 'other';
 
   let running = null;
   function render(result) {
     const panel = $('trust');
     panel.dataset.state = result.state;
-    $('trust-text').textContent = TRUST_TEXT[result.state];
+    $('trust-text').textContent = trustText(result.state, device);
     $('open-controller').hidden = result.state !== 'trusted';
     if (result.link) $('open-controller').href = result.link;
     $('check-again').hidden = result.state === 'trusted' || result.state === 'checking';

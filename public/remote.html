@@ -13,12 +13,12 @@
   <p class="brand">Living Room Sports</p>
   <form id="join-form" class="join-card">
     <h1>Join the console</h1>
-    <p class="lede">Scan the code on the TV with this phone's camera, or type the room code it shows.</p>
+    <p class="lede">Scan the code on the TV with this <span data-device>phone</span>'s camera, or type the room code it shows.</p>
     <label>Your name<input id="name" maxlength="20" autocomplete="nickname" placeholder="Player" spellcheck="false"></label>
     <label>Room code<input id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="off"></label>
     <button class="join-button">Join</button>
   </form>
-  <p id="remote-status" class="join-status" role="status">Connect this phone to the same Wi-Fi as the PC.</p>
+  <p id="remote-status" class="join-status" role="status">Connect this <span data-device>phone</span> to the same Wi-Fi as the PC.</p>
 </main>
 
 <section id="remote-controls" class="frame" hidden>
@@ -26,16 +26,18 @@
     <header class="bar">
       <span id="slot-label" class="player">P1</span>
       <div class="now"><p id="activity-name" class="now-name">Wii Menu</p><p id="activity-detail" class="now-detail"></p></div>
+      <!-- A line of its own under the bar when the screen is upright; in the bar in landscape. -->
+      <div class="motion-line">
+        <span id="sensor-status" class="motion-state">Motion is starting…</span>
+        <button id="enable-motion" class="pill" type="button" hidden>Turn on motion</button>
+        <a id="motion-setup" class="pill" href="/phone-setup" hidden>Turn on motion</a>
+      </div>
       <button id="more-button" class="more" type="button" aria-label="More" aria-expanded="false" aria-controls="sheet"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.2"/><circle cx="12" cy="12" r="2.2"/><circle cx="19" cy="12" r="2.2"/></svg></button>
     </header>
-    <div class="motion-line">
-      <span id="sensor-status" class="motion-state">Motion is starting…</span>
-      <button id="enable-motion" class="pill" type="button" hidden>Turn on motion</button>
-      <a id="motion-setup" class="pill" href="/phone-setup" hidden>Turn on motion</a>
-    </div>
     <p id="slot-note" class="slot-note" hidden></p>
 
-    <!-- The Wii Remote, held upright with its top edge toward the TV. -->
+    <!-- The Wii Remote. Its top edge points at the TV: upright, the IR window is at the top; in landscape the
+         remote is laid across the screen, the IR window still on the top edge. -->
     <div class="remote">
       <span class="ir" aria-hidden="true"></span>
       <div class="dpad" role="group" aria-label="Control pad">
@@ -60,7 +62,7 @@
       <div class="leds" aria-hidden="true"><i class="led"></i><i class="led"></i><i class="led"></i><i class="led"></i></div>
     </div>
 
-    <!-- The Nunchuk, under the remote when the game needs one. -->
+    <!-- The Nunchuk, when the game needs one: under the remote, or to its left in landscape. -->
     <div class="nunchuk">
       <div id="stick" class="stick" role="group" aria-label="Control stick"><span id="stick-knob" class="knob" aria-hidden="true"></span></div>
       <div class="nunchuk-keys">
@@ -70,8 +72,8 @@
       </div>
     </div>
 
-    <!-- The Wii Wheel: the remote on its side, top edge to the left. The pad turns with it, so the arrow
-         that points left is the remote's Up. -->
+    <!-- The Wii Wheel: the remote on its side, its pointing end to the left. Always wide, so on an upright
+         screen it is drawn across it. The pad turns with it, so the arrow that points left is the remote's Up. -->
     <div class="wheel">
       <div class="wheel-side">
         <div class="dpad dpad-sideways" role="group" aria-label="Control pad: items">
@@ -85,7 +87,7 @@
       </div>
       <div class="wheel-middle">
         <div class="dial" aria-hidden="true"><span id="wheel-dial" class="dial-face"></span></div>
-        <p class="wheel-hint">Hold the phone like a steering wheel and tilt it to steer</p>
+        <p class="wheel-hint">Hold the <span data-device>phone</span> like a steering wheel and tilt it to steer</p>
         <div class="small-keys">
           <button data-button="minus" class="key-small" type="button" aria-label="Minus"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 10h10"/></svg></button>
           <button data-button="home" class="key-home" type="button" aria-label="Home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5M6.5 10v8.5h11V10"/></svg></button>

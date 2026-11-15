@@ -1,9 +1,12 @@
-// Phone sensors → Wii Remote motion and pointer. Pure functions, shared by the phone page and its tests.
+// Phone and tablet sensors → Wii Remote motion and pointer, and how the controller lies on the screen. Pure
+// functions, shared by the controller page and its tests.
 //
-// Device axes (W3C DeviceMotion): x toward the phone's right edge, y toward its top edge, z out of the screen.
-// A phone held like a Wii Remote (top edge toward the TV, screen up) already has the remote's axes: right,
-// forward (the pointing end) and up (the button face). Held sideways like a Wii Wheel it is the same remote
-// turned on its side, so the mapping is the same for every layout.
+// Device axes (W3C DeviceMotion): x toward the device's right edge, y toward its top edge, z out of the screen,
+// all fixed to the device's natural orientation. A phone held upright like a Wii Remote (top edge toward the
+// TV, screen up) already has the remote's axes: right, forward (the pointing end) and up (the button face).
+// The controller follows the screen, so in landscape the end that points at the TV is the screen's top edge,
+// which is the device's side: `hold` (see controllerView) says which edge it is, and the readings are turned
+// to match.
 
 export const STANDARD_GRAVITY = 9.80665;
 const DEGREES = 180 / Math.PI;
@@ -11,6 +14,7 @@ export const clamp = (value, low = -1, high = 1) => Math.max(low, Math.min(high,
 export const wrap180 = degrees => ((((degrees + 180) % 360) + 360) % 360) - 180;
 const round = value => Math.round(value * 1000) / 1000 + 0; // + 0 turns -0 into 0
 const finite = value => (Number.isFinite(value) ? value : 0);
+const quarters = degrees => ((Math.round(degrees / 90) % 4) + 4) % 4; // 0..3 quarter turns
 
 // "Up" in device axes for a phone at this tilt: what accelerationIncludingGravity reports at rest, per the spec.
 export function expectedGravity(beta, gamma) {
@@ -60,13 +64,30 @@ export function remoteMotion(gravityVector, rotationRate, calibration) {
   return { a, g };
 }
 
+// remoteMotion's readings for a remote whose pointing end is `hold` degrees round from the device's top edge
+// (90: its right edge). Both turn about the screen's normal, which stays the remote's up.
+export function heldMotion({ a, g }, hold = 0) {
+  const q = quarters(hold);
+  if (!q) return { a, g };
+  const cos = [1, 0, -1, 0][q], sin = [0, 1, 0, -1][q];
+  const turn = (x, y) => [x * cos - y * sin, x * sin + y * cos].map(round);
+  const [right, forward] = turn(a[0], a[1]);
+  const [pitch, roll] = turn(g[0], g[2]); // turning about the device's x and y axes
+  return { a: [right, forward, a[2]], g: [pitch, g[1], roll] };
+}
+
 // How far the phone can turn from where it was recentred before the pointer reaches the screen's edge.
 export const POINTER_RANGE = { yaw: 24, pitch: 16 };
-// deviceorientation → pointer in -1..1, x to the right and y downward (alpha grows as the phone turns left,
-// beta as its top edge lifts).
-export function pointerFrom(orientation, base) {
+// How far the pointing end is lifted, from deviceorientation: beta lifts the device's top edge and gamma lowers
+// its right edge.
+export function pitchOf(orientation, hold = 0) {
+  const beta = finite(orientation.beta), gamma = finite(orientation.gamma);
+  return [beta, -gamma, -beta, gamma][quarters(hold)];
+}
+// deviceorientation → pointer in -1..1, x to the right and y downward (alpha grows as the device turns left).
+export function pointerFrom(orientation, base, hold = 0) {
   const yaw = wrap180(orientation.alpha - base.alpha);
-  const pitch = orientation.beta - base.beta;
+  const pitch = wrap180(pitchOf(orientation, hold) - pitchOf(base, hold));
   return { x: round(clamp(-yaw / POINTER_RANGE.yaw)), y: round(clamp(-pitch / POINTER_RANGE.pitch)) };
 }
 
@@ -88,17 +109,51 @@ export function stickFrom(dx, dy, radius) {
   return [round(x), round(y)];
 }
 
-// The screen's rotation from the phone's natural portrait orientation: 0, 90 (top edge to the left), 180 or 270.
+// The screen's rotation from the device's natural orientation: 0, 90 (top edge to the left), 180 or 270.
 export function screenAngle(screenObject, legacyOrientation) {
-  const angle = Number(screenObject?.orientation?.angle ?? legacyOrientation ?? 0) || 0;
-  return (((Math.round(angle / 90) * 90) % 360) + 360) % 360;
+  return quarters(Number(screenObject?.orientation?.angle ?? legacyOrientation ?? 0) || 0) * 90;
 }
 
-// How far to turn the controller on screen so it lies along the phone the way its layout is held: the Wii
-// Remote along the phone's length, the wheel across it with the top edge to the left. That way the controller
-// faces the player whether or not the browser rotates the page.
-export function layoutRotation(layout, angle) {
-  return wrap180((layout === 'wheel' ? 90 : 0) - angle);
+// How the controller lies on the screen.
+//   layout: remote, nunchuk or wheel.
+//   shown:  the screen angle the controller is drawn for. The page passes the screen's angle once the device
+//           has been held still, so a swing that tips the browser into turning the page changes nothing.
+//   actual: the screen's angle now. width, height: the page's size now.
+// Returns
+//   view:   the screen angle the controller is drawn upright for. The wheel is always wide, so on a tall screen
+//           it is drawn across, for the device turned a quarter to the left.
+//   turn:   how far to turn the page's contents (clockwise, as CSS rotate()) to draw it so.
+//   width, height, shape: the controller's own size once turned, and whether that is portrait or landscape.
+//   hold:   where the remote's pointing end is, in degrees round from the device's top edge (see heldMotion):
+//           the top of the drawn controller, or for the wheel its left.
+// The page's shape comes from its size, not the angle, because some Android tablets are landscape at 0°.
+export function controllerView(layout, shown, actual, width, height) {
+  const pageTall = width > 0 && height > 0 ? height >= width : quarters(actual) % 2 === 0;
+  const tallWhenShown = pageTall !== ((quarters(shown) - quarters(actual)) % 2 !== 0);
+  const view = ((quarters(shown) + (layout === 'wheel' && tallWhenShown ? 1 : 0)) % 4) * 90;
+  const turn = wrap180(view - quarters(actual) * 90);
+  const sideways = Math.abs(turn) === 90;
+  return {
+    view, turn,
+    width: sideways ? height : width, height: sideways ? width : height,
+    shape: pageTall !== sideways ? 'portrait' : 'landscape',
+    hold: (view + (layout === 'wheel' ? 270 : 0)) % 360
+  };
+}
+
+// How much larger than on a phone to draw the controller: a phone page is about 390 by 800, either way round,
+// and an iPad about half as large again.
+export function controllerScale(width, height) {
+  const short = Math.min(width, height), long = Math.max(width, height);
+  return short > 0 ? round(clamp(Math.min(short / 390, long / 800), 1, 1.75)) : 1;
+}
+
+// What the page calls the device. iPads ask for desktop pages and name themselves a Mac, but a Mac has no
+// touch screen; Android tablets leave "Mobile" out of their user agent.
+export function deviceKind(userAgent = '', maxTouchPoints = 0) {
+  if (/iPad/.test(userAgent) || (/Macintosh/.test(userAgent) && maxTouchPoints > 1)) return 'iPad';
+  if (/Android/.test(userAgent) && !/Mobile/.test(userAgent)) return 'tablet';
+  return 'phone';
 }
 
 // A point given in screen pixels relative to an element's centre, in the element's own axes when the element
