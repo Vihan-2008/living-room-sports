@@ -2,6 +2,8 @@ const $ = id => document.getElementById(id);
 let socket, slot = null, joined = false, reconnectTimer, desired = false, motionEnabled = false;
 let x = 0, y = 0, baseAlpha = null, baseBeta = null, lastSend = 0, lastSwing = 0, lastShake = 0, swing = 0;
 const held = new Set();
+const pointers = new Map();
+let suspended = document.hidden;
 const codeFromLink = new URLSearchParams(location.search).get('code');
 if (codeFromLink) $('code').value = codeFromLink;
 function send(data, force = false) {
@@ -30,28 +32,38 @@ function connect() {
   socket.onerror = () => { $('remote-status').textContent = 'Cannot reach the room. Check Wi-Fi and keep the PC dashboard running.'; };
 }
 $('join-form').onsubmit = e => { e.preventDefault(); if (socket?.readyState === WebSocket.OPEN || socket?.readyState === WebSocket.CONNECTING) return; desired = true; connect(); };
-$('leave').onclick = () => { desired = false; clearTimeout(reconnectTimer); socket?.close(); joined = false; $('join-form').hidden = false; $('remote-controls').hidden = true; $('remote-status').textContent = 'You left the room.'; };
+$('leave').onclick = () => { desired = false; clearTimeout(reconnectTimer); releaseAll(); socket?.close(); joined = false; $('join-form').hidden = false; $('remote-controls').hidden = true; $('remote-status').textContent = 'You left the room.'; };
 function recenter() { baseAlpha = null; baseBeta = null; x = 0; y = 0; send({ shake: true }, true); }
 $('recenter').onclick = recenter;
 function releaseAll() {
+  x = 0; y = 0; baseAlpha = null; baseBeta = null; swing = 0;
   for (const button of held) send({ button, pressed: false }, true);
-  held.clear(); document.querySelectorAll('.held').forEach(el => el.classList.remove('held'));
+  held.clear(); pointers.clear(); document.querySelectorAll('.held').forEach(el => el.classList.remove('held'));
+  send({ pointing: true }, true);
 }
 for (const button of document.querySelectorAll('[data-button]')) {
   button.addEventListener('contextmenu', e => e.preventDefault());
   button.onpointerdown = e => {
-    e.preventDefault(); button.setPointerCapture(e.pointerId); held.add(button.dataset.button); button.classList.add('held');
+    e.preventDefault();
+    if (!joined || suspended || document.hidden) return;
+    button.setPointerCapture(e.pointerId); pointers.set(e.pointerId, button.dataset.button);
+    if (held.has(button.dataset.button)) return;
+    held.add(button.dataset.button); button.classList.add('held');
     if (button.dataset.button === 'one') recenter();
     send({ button: button.dataset.button, pressed: true }, true); navigator.vibrate?.(12);
   };
   const release = e => {
-    e.preventDefault(); if (!held.delete(button.dataset.button)) return;
+    e.preventDefault();
+    if (pointers.get(e.pointerId) !== button.dataset.button) return;
+    pointers.delete(e.pointerId);
+    if ([...pointers.values()].includes(button.dataset.button) || !held.delete(button.dataset.button)) return;
     button.classList.remove('held'); send({ button: button.dataset.button, pressed: false, swing: button.dataset.button === 'b' ? swing : 0 }, true); swing = 0;
   };
   button.onpointerup = release; button.onpointercancel = release; button.onlostpointercapture = release;
 }
-window.addEventListener('blur', releaseAll);
-document.addEventListener('visibilitychange', () => { if (document.hidden) releaseAll(); });
+window.addEventListener('blur', () => { suspended = true; releaseAll(); });
+window.addEventListener('focus', () => { suspended = document.hidden; });
+document.addEventListener('visibilitychange', () => { suspended = document.hidden; if (suspended) releaseAll(); });
 $('enable-motion').onclick = async () => {
   if (motionEnabled) return;
   if (!window.isSecureContext) { $('sensor-status').textContent = 'Motion needs trusted HTTPS on this phone. Use the buttons now; see the PC README for sensor setup.'; return; }
@@ -69,6 +81,7 @@ $('enable-motion').onclick = async () => {
   } catch (error) { $('sensor-status').textContent = error.message; }
 };
 function orientation(e) {
+  if (!joined || suspended || document.hidden) return;
   if (!Number.isFinite(e.alpha) || !Number.isFinite(e.beta)) return;
   baseAlpha ??= e.alpha; baseBeta ??= e.beta;
   const yaw = ((e.alpha - baseAlpha + 540) % 360) - 180;
@@ -77,6 +90,7 @@ function orientation(e) {
   send({ pointing: true });
 }
 function motion(e) {
+  if (!joined || suspended || document.hidden) return;
   const acceleration = e.acceleration || e.accelerationIncludingGravity;
   if (!acceleration) return;
   const values = [acceleration.x, acceleration.y, acceleration.z];

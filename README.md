@@ -32,6 +32,8 @@ Device capabilities vary. The browser exposes orientation and acceleration, not 
 
 The elongated white remote has a round D-pad housing, A, minus, Home, plus, 1 and 2 buttons, four player lights, and a labelled underside B-trigger panel (accessible on the front of the phone screen).
 
+Buttons support simultaneous touches: hold a direction and B together, or keep a button held with either of two fingers. Switching away from the remote releases held buttons, clears pending swing data and centres aim. Motion input pauses while the page is hidden or unfocused and resumes with a fresh pointing centre when you return. Leaving the room releases controls before disconnecting; reconnecting starts with no buttons held.
+
 - **D-pad left/right:** choose a channel or adjust aim. **A / 2:** launch or play. **Home:** return to menu. **− / +:** previous/next channel; + starts a new match after the result.
 - **Point:** aim with orientation. **Hold B:** charge a shot; release to shoot in bowling/golf. In boxing B blocks and widens the timing window. **Shake / 1:** recenter. A uses the visible power meter, so motion is optional.
 - **Bluebird Lanes (bowling):** ten frames, two rolls per frame unless you strike. The second roll clears remaining pins. Strikes count the next two rolls; spares count the next roll. The tenth frame awards earned bonus rolls. Maximum 300. Scores include bonuses as subsequent rolls arrive.
@@ -63,6 +65,6 @@ For a solo keyboard demo, choose a channel before pairing phones. Use **left/rig
 npm test
 ```
 
-JARVIS runs `python check.py`, which invokes the same Node tests registered in its `TESTS` list. Tests cover HTTP asset boundaries, real WebSocket pairing for four phones and rejection of a fifth, reconnection slot reuse, input limits, rumble routing, malformed frames, sports rules and completed matches, bowling bonuses, three race courses, item effects, drift boosts, crossing order, four-player controls, client syntax and remote markup. A minimal DOM harness runs the actual dashboard launch, input, drawing, restart and home handlers. Real phone sensor permissions, gesture feel, vibration, visual appearance and LAN firewall behavior require a physical-device smoke test.
+JARVIS runs `python check.py`, which invokes the same Node tests registered in its `TESTS` list. Tests cover HTTP asset boundaries, real WebSocket pairing for four phones and rejection of a fifth, reconnection slot reuse, input limits, rumble routing, malformed frames, sports rules and completed matches, bowling bonuses, three race courses, item effects, drift boosts, crossing order, four-player controls, client syntax and remote markup. Minimal DOM harnesses run the actual dashboard launch, input, drawing, restart and home handlers, plus remote multi-touch, cancelled pointers, background sensor suppression, leaving and reconnecting. Real phone sensor permissions, gesture feel, vibration, visual appearance and LAN firewall behavior require a physical-device smoke test.
 
 The implementation uses original game names and locally drawn art. It is not an exact replica of Wii Sports or Mario Kart: game content, rendering, physics and many modes differ. Nintendo names identify the requested inspiration only. This project is not affiliated with Nintendo.
