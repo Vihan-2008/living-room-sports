@@ -28,7 +28,7 @@ async function client(url) {
 }
 test('HTTP serves only public assets, join configuration and correct MIME types', async t => {
   const app = await fixture(t);
-  for (const path of ['/', '/remote', '/style.css', '/dashboard.js', '/remote.js', '/games.js']) {
+  for (const path of ['/', '/remote', '/style.css', '/dashboard.js', '/remote.js', '/games.js', '/kart.js', '/sports-match.js', '/race-view.js']) {
     const response = await fetch(app.base + path); assert.equal(response.status, 200); assert.ok((await response.text()).length > 100);
     if (path.endsWith('.js')) assert.match(response.headers.get('content-type'), /javascript/);
   }
@@ -82,8 +82,8 @@ test('fragmented TCP delivery works; unmasked WebSocket frames are disconnected'
   const closed = once(socket, 'close'); socket.write(Buffer.from([0x81, 0])); await closed;
 });
 test('all five original sports reward aim, power or timing and produce bounded scores', () => {
-  assert.equal(sports.length, 5); assert.equal(new Set(sports.map(s => s.name)).size, 5);
-  for (const sport of sports) {
+  assert.equal(sports.length, 6); assert.equal(new Set(sports.map(s => s.name)).size, 6);
+  for (const sport of sports.filter(s => s.id !== 'kart')) {
     const good = evaluate(sport.id, { aim: sport.id === 'golf' ? .15 : 0, power: sport.id === 'golf' ? .68 : 1, timing: .8 });
     const miss = evaluate(sport.id, { aim: -1, power: 0, timing: 0 });
     assert.ok(good.score > miss.score, sport.id); assert.ok(good.text.length > 0);
@@ -101,7 +101,7 @@ test('one to four players each receive exactly three turns and a finished match'
   }
 });
 test('client scripts parse and markup contains complete remote controls and permission UI', async () => {
-  for (const file of ['server.js', 'public/dashboard.js', 'public/remote.js', 'public/games.js']) {
+  for (const file of ['server.js', 'public/dashboard.js', 'public/remote.js', 'public/games.js', 'public/kart.js', 'public/sports-match.js', 'public/race-view.js']) {
     const result = spawnSync(process.execPath, ['--check', new URL('../' + file, import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')], { encoding: 'utf8' });
     assert.equal(result.status, 0, result.stderr);
   }

@@ -5,7 +5,7 @@ import { createHash, randomInt } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const root = new URL('./public/', import.meta.url);
-const assets = new Map(['index.html', 'remote.html', 'style.css', 'dashboard.js', 'remote.js', 'games.js'].map(name => ['/' + name, name]));
+const assets = new Map(['index.html', 'remote.html', 'style.css', 'dashboard.js', 'remote.js', 'games.js', 'kart.js', 'race-view.js', 'sports-match.js'].map(name => ['/' + name, name]));
 export const colors = ['#149ed4', '#ef665e', '#61b968', '#e1ab23'];
 export function frame(value, opcode = 1) {
   const body = Buffer.from(typeof value === 'string' ? value : JSON.stringify(value));
