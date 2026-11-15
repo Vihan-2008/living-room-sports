@@ -178,13 +178,26 @@ for (const id of ['pair', 'pair-bottom']) $(id).onclick = () => {
   releaseSportsControls();
   if (race) for (const p of race.racers) if (!p.bot) raceInput(race, p.slot, { cancel: true });
   $('pair-dialog').showModal();
+  loadJoinLinks();
 };
 $('close-pair').onclick = () => $('pair-dialog').close();
-fetch('/config').then(r => r.json()).then(config => {
-  $('room-code').textContent = config.code;
-  const links = config.addresses.length ? config.addresses : [config.local];
-  for (const url of links) { const a = document.createElement('a'); a.href = url; a.textContent = url; a.target = '_blank'; a.rel = 'noopener'; $('join-links').append(a); }
-}).catch(() => { $('join-links').textContent = 'Unable to load join links. Reload the dashboard.'; });
+async function loadJoinLinks() {
+  $('join-links').replaceChildren();
+  $('join-links').textContent = 'Loading phone links…';
+  try {
+    const response = await fetch('/config');
+    if (!response.ok) throw new Error('Configuration unavailable');
+    const config = await response.json();
+    $('room-code').textContent = config.code;
+    const current = new URL(location.href);
+    const local = /^(localhost|.*\.localhost|127\.[\d.]+|0\.0\.0\.0|\[::1\]|\[::\])$/i.test(current.hostname);
+    const links = [...new Set([...(local ? [] : [`${current.origin}/remote?code=${config.code}`]), ...config.addresses])];
+    $('join-links').textContent = '';
+    if (!links.length) $('join-links').textContent = 'No phone-accessible network address found. Connect this PC to Wi-Fi, then close and reopen this dialog. Localhost only opens on this PC.';
+    for (const url of links) { const a = document.createElement('a'); a.href = url; a.textContent = url; a.target = '_blank'; a.rel = 'noopener'; $('join-links').append(a); }
+  } catch { $('join-links').textContent = 'Unable to load join links. Keep the app running, then close and reopen this dialog to retry.'; }
+}
+loadJoinLinks();
 function clock() { const now = new Date(); $('clock').textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); $('date').textContent = now.toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }); }
 clock(); setInterval(clock, 1000); connect();
 

@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import net from 'node:net';
-import { createApp } from '../server.js';
+import { createApp, phoneAddresses } from '../server.js';
 import { sports, evaluate, nextTurn, timingAt } from '../public/games.js';
 
 async function fixture(t) {
@@ -26,6 +26,20 @@ async function client(url) {
     return new Promise((resolve, reject) => { const p = { type, resolve }; p.timer = setTimeout(() => reject(new Error(`Timed out: ${type}`)), 2500); pending.push(p); });
   } };
 }
+
+test('phone links prefer home adapters and omit loopback, link-local and duplicate addresses', () => {
+  const ipv4 = address => ({ address, family: 'IPv4', internal: false });
+  const addresses = phoneAddresses({
+    'vEthernet (WSL)': [ipv4('172.20.0.1')],
+    Tailscale: [ipv4('100.64.0.2')],
+    Ethernet: [ipv4('169.254.2.3')],
+    'Wi-Fi': [ipv4('192.168.1.40'), { ...ipv4('192.168.1.40'), family: 4 },
+      { address: 'fe80::1', family: 'IPv6', internal: false }],
+    Loopback: [{ ...ipv4('127.0.0.1'), internal: true }, ipv4('127.0.0.2'), ipv4('0.0.0.0')]
+  }, 4321, '123456');
+  assert.deepEqual(addresses, ['192.168.1.40', '172.20.0.1', '100.64.0.2'].map(ip => `http://${ip}:4321/remote?code=123456`));
+  assert.deepEqual(phoneAddresses({}, 3000, '123456'), []);
+});
 test('HTTP serves only public assets, join configuration and correct MIME types', async t => {
   const app = await fixture(t);
   for (const path of ['/', '/remote', '/style.css', '/dashboard.js', '/remote.js', '/games.js', '/kart.js', '/sports-match.js', '/race-view.js']) {
