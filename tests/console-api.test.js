@@ -224,12 +224,15 @@ test('the menu and the phones can move a running game to the other screen, and t
   const phone = await client(f.ws); phone.send({ type: 'join', code: f.app.code });
   await phone.get('joined');
   await f.call('/api/launch', { title: 'sports', sport: 'tennis' });
-  assert.equal((await phone.get('activity', a => a.mode === 'game')).screens, 2, 'the phone knows there is another screen');
+  const playing = await phone.get('activity', a => a.mode === 'game');
+  assert.deepEqual([playing.screens, playing.screen], [2, 'Main screen'], 'the phone knows there is another screen, and which one the game is on');
   const moved = await f.call('/api/screen', { to: 'next' });
   assert.equal(moved.status, 200);
   assert.equal(moved.body.settings.launch.screen, SECOND, 'kept for the next game');
   assert.equal(windows.window.x, 1920);
+  assert.equal((await phone.get('activity', a => a.screen === 'Second screen')).mode, 'game', 'the phone is told where the game went');
   phone.send({ type: 'screen' });
   await until(() => windows.window.x === 0);
+  assert.equal((await phone.get('activity', a => a.screen === 'Main screen')).mode, 'game');
   await until(async () => (await f.call('/api/state')).body.settings.launch.screen === 'main');
 });

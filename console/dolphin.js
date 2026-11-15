@@ -193,7 +193,9 @@ export function createDolphinManager({ settings, dataDir, dsuPort = () => null, 
 
   const state = () => ({
     running: !!session, title: session?.title || null, sport: session?.sport || null, pid: session?.child.pid || null,
-    startedAt: session?.startedAt || null, roles: session?.roles || [], stopping: !!stopping, lastExit
+    startedAt: session?.startedAt || null, roles: session?.roles || [], stopping: !!stopping, lastExit,
+    // The screen the game is on, by id: phones point at it, so they are asked to recenter when it changes.
+    screen: session?.screen || null
   });
   const changed = () => onChange(state());
 
@@ -242,6 +244,7 @@ export function createDolphinManager({ settings, dataDir, dsuPort = () => null, 
     catch (error) { await journal.restore(); throw new LaunchError('spawn-failed', `Dolphin could not be started: ${error.message}`, 'Choose Dolphin.exe again in Wii Options › Setup.', 500); }
     let ended;
     session = { child, title: request.title, sport: request.sport || null, startedAt, roles: plan.roles, userDir, discId: disc.id,
+      screen: displays ? findScreen(displays.screens, s.launch.screen)?.id || null : null,
       ended: new Promise(resolve => { ended = resolve; }) };
     lastExit = null;
     await new Promise((resolve, reject) => {
@@ -304,6 +307,7 @@ export function createDolphinManager({ settings, dataDir, dsuPort = () => null, 
       const target = to === 'next' ? nextScreen(displays.screens, from?.id) : findScreen(displays.screens, to);
       if (!from || !target) throw new LaunchError('one-screen', 'Only one screen is connected.', 'Connect another screen, then try again.');
       if (target.id !== from.id) await displays.move(window.handle, placeWindow(window, from, target));
+      current.screen = target.id;
       await settings.save({ launch: { screen: target.primary ? 'main' : target.id } });
       changed();
       return state();

@@ -4,7 +4,7 @@
 
 ## In short
 
-- **Automated checks:** all 125 tests pass (`python check.py`).
+- **Automated checks:** all 126 tests pass (`python check.py`).
 - **Installed build:** the portable build in `dist` ran end to end on this PC. It used its own Node.js, opened the Wii Menu in its own window and started Bowling. It stopped the game cleanly, and closing the window shut everything down.
 - **Not yet checked:** real hardware. Nothing here has run against real Dolphin with real discs, a physical phone or a DualSense. [Still to check](#still-to-check-on-real-hardware) lists exactly what to try.
 
@@ -36,10 +36,11 @@
 | Per-activity Wii Remote, Nunchuk and MotionPlus requirements | Catalogue tests; selector entries | Works |
 | Missing files, disconnects, launch failures and crashes | Tests for each; the stand-in crashing on demand | Works: each reports what happened and what to do |
 | Emulator settings and saves preserved | Tests that write and then restore Dolphin's settings, including after an interrupted run | Works on the stand-in's user folder |
-| Phone controls, including gyro motion | The real phone page run in a fake browser (15 tests) and its motion maths (4 tests); layouts viewed at phone size | Works in tests. No physical phone was used |
+| Phone controls, including gyro motion | The real phone page run in a fake browser (18 tests) and its motion maths (6 tests); layouts viewed at phone size | Works in tests. No physical phone was used |
 | Phone motion over HTTPS | Tests of the setup page and certificate download; both setups viewed at phone size | Works in tests. Installing the certificate on a real phone is unverified |
 | Installed build tested; portable build delivered | Ran the portable build; launcher tests build and run it with its own Node.js | Works |
 | Games open on the chosen screen and move between screens | Real Dolphin, full screen and borderless, running a tiny test program from a throwaway user folder: its window was moved from this PC's 1920 × 1080 main screen to its 2560 × 1600 screen at 200% and back. Then the real server with the stand-in: Game screen, Move to the other screen, and the phone's ⋯ menu | Works. Dolphin opens a small window and goes full screen a moment later on whichever screen it is on, so the move lands either way |
+| Phones recenter on the game's new screen | The real phone page in a fake browser; the console and server tests follow which screen the game is on. The prompt viewed at phone size, upright and in landscape, against a stand-in console | Works in tests. No physical phone was used |
 | Home › Wii Menu in a game returns to the Wii Menu | Real Dolphin, with the console's logger settings, wrote its warning to `Logs\dolphin.log` without a pop-up. The real server closed the stand-in within a second of the Wii Menu request appearing in its log | Works. Not yet tried from a real disc's HOME menu |
 
 ## Screens
@@ -76,5 +77,5 @@ The phone setup page, which opens on Android steps for an Android phone, and the
 2. **A phone.** Join, then install the certificate: iPhone in Safari, Android in Chrome. In Bowling, check that turning the phone right moves the pointer right and that a swing throws. In Mario Kart Wii, check that tilting steers.
 3. **A DualSense over USB and Bluetooth.** Check Wii Menu navigation, the Controllers › Test tab, the gyro pointer in a sport, and that it reconnects after being turned off and on.
 4. **From the shortcut.** Start a game and check that Dolphin comes to the front and that the Wii Menu comes back after you quit the game.
-5. **Two screens with a disc.** Set **Wii Options › Dolphin › Game screen** to the second screen, start Wii Sports and check that it fills that screen. Press **Move to the other screen**, then press Home in the game and choose Wii Menu: the Wii Menu should come back.
+5. **Two screens with a disc.** Set **Wii Options › Dolphin › Game screen** to the second screen, start Wii Sports and check that it fills that screen. Press **Move to the other screen**. On a phone, point at the game and tap **Recenter**: the pointer should be in the middle of the game. Then press Home in the game and choose Wii Menu: the Wii Menu should come back.
 6. **Wii Sports Resort.** Start Golf and check that no message about the extension appears; start Archery and check that the Nunchuk works.
