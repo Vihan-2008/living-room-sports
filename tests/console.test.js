@@ -17,8 +17,8 @@ import { createAuthority, issueServerCertificate, createCertificateStore, isPerm
 import { candidatePaths, findDolphin, resolveUserDir, classifyExit, launchArgs, dsuEntries, createDolphinManager, asksForWiiMenu, followLog } from '../console/dolphin.js';
 import { createDisplays } from '../console/screens.js';
 import { fakeWindows, until, MAIN, SECOND, MAIN_ONLY } from './fake-windows.js';
-import { PHONE_TO_DSU, mkwRows, remoteRows } from '../public/bindings.js';
-import { SPORTS, ENTRY_COUNT, activityNeeds, activityGuide, MKW_MODES, sportById } from '../public/catalog.js';
+import { PHONE_TO_DSU, mkwRows, brawlRows, remoteRows } from '../public/bindings.js';
+import { SPORTS, ENTRY_COUNT, activityNeeds, activityGuide, MKW_MODES, BRAWL_MODES, sportById } from '../public/catalog.js';
 
 async function temp(t) {
   const dir = await mkdtemp(join(tmpdir(), 'lrs-test-'));
@@ -64,9 +64,10 @@ test('disc headers are read from ISO, WBFS, RVZ, CISO and GCZ images, and junk i
   assert.equal(await identify(join(dir, 'tiny.iso')), null);
 });
 
-test('the three channel titles are recognised by ID in every region, plus the two-in-one disc by title', () => {
+test('the four channel titles are recognised by ID in every region, plus the two-in-one disc by title', () => {
   for (const region of 'EPJK') {
     assert.equal(recognize(`RMC${region}01`), 'mkw'); assert.equal(recognize(`RSP${region}01`), 'sports'); assert.equal(recognize(`RZT${region}01`), 'resort');
+    assert.equal(recognize(`RSB${region}01`), 'brawl');
   }
   assert.equal(recognize('RSPE02'), null);
   assert.equal(recognize('SP2E01', 'Wii Sports + Wii Sports Resort'), 'pack');
@@ -79,15 +80,19 @@ test('library scans nested folders, reports unreadable files and keeps an earlie
   await writeFile(join(dir, 'Wii', 'Racing', 'Mario Kart Wii.rvz'), images.rvz('RMCE01', 'MARIO KART WII'));
   await writeFile(join(dir, 'Wii', 'sports-us.wbfs'), images.wbfs('RSPE01', 'Wii Sports'));
   await writeFile(join(dir, 'Wii', 'sports-eu.iso'), images.iso('RSPP01', 'Wii Sports'));
+  await writeFile(join(dir, 'Wii', 'Super Smash Bros. Brawl (USA) (Rev 1).rvz'), images.rvz('RSBE01', 'Super Smash Bros. Brawl'));
   await writeFile(join(dir, 'Wii', 'broken.iso'), Buffer.alloc(0x500));
   await writeFile(join(dir, 'Wii', 'notes.txt'), 'ignored');
   const discs = await scanLibrary([dir], [join(dir, 'missing.iso')]);
-  assert.equal(discs.filter(d => d.kind).length, 3);
+  assert.equal(discs.filter(d => d.kind).length, 4);
   assert.equal(discs.find(d => d.name === 'broken.iso').error, 'Not a readable Wii or GameCube disc image');
   assert.equal(discs.find(d => d.name === 'missing.iso').error, 'File not found');
   assert.equal(discs.find(d => d.id === 'RSPP01').region, 'Europe');
   const titles = chooseTitles(discs, { sports: join(dir, 'Wii', 'sports-eu.iso') });
-  assert.equal(titles.mkw.id, 'RMCE01'); assert.equal(titles.sports.id, 'RSPP01'); assert.equal(titles.resort, null);
+  assert.equal(titles.mkw.id, 'RMCE01'); assert.equal(titles.sports.id, 'RSPP01'); assert.equal(titles.resort, null); assert.equal(titles.brawl.id, 'RSBE01');
+  await writeFile(join(dir, 'pack.iso'), images.iso('SP2P01', 'Wii Sports + Wii Sports Resort'));
+  const fromPack = chooseTitles(await scanLibrary([], [join(dir, 'pack.iso')]));
+  assert.deepEqual([fromPack.sports?.id, fromPack.resort?.id, fromPack.mkw, fromPack.brawl], ['SP2P01', 'SP2P01', null, null], 'the two-in-one disc stands in for its own two games only');
 });
 
 // ---- Settings -------------------------------------------------------------------------------
@@ -155,6 +160,19 @@ test('Mario Kart Wii: DualSense becomes GameCube port 1, phones become sideways 
   assert.equal(plan.roles[1].as, 'Wii Remote 2 (held sideways)');
 });
 
+test('Brawl: DualSense and keyboard become GameCube controllers, phones become Wii Remotes with a Nunchuk', () => {
+  const plan = buildLaunchPlan('brawl', ['dualsense', 'phone', 'keyboard', 'phone'], { keyboardP1: false });
+  assert.deepEqual(plan.config, ['Dolphin.Core.SIDevice0=6', 'Dolphin.Core.SIDevice1=6', 'Dolphin.Core.SIDevice2=0', 'Dolphin.Core.SIDevice3=0']);
+  assert.deepEqual(plan.controls, { WiimoteSource0: '0', PadProfile1: 'Living Room P1 Brawl dualsense', WiimoteSource1: '1', WiimoteProfile2: 'Living Room P2 Brawl phone',
+    WiimoteSource2: '0', PadProfile2: 'Living Room P3 Brawl keyboard', WiimoteSource3: '1', WiimoteProfile4: 'Living Room P4 Brawl phone' });
+  assert.match(plan.profiles.find(p => p.name.includes('P1')).text, /C-Stick\/Up = `SDL\/0\/DualSense Wireless Controller:Right Y\+`/, 'smash attacks on the right stick');
+  const phone = plan.profiles.find(p => p.name.includes('P2')).text;
+  assert.match(phone, /Extension = Nunchuk/);
+  assert.match(phone, /Extension\/Attach MotionPlus = False/);
+  assert.match(phone, /Nunchuk\/Stick\/Left = `DSUClient\/1\/LivingRoomPhones:Left X-`/);
+  assert.deepEqual(plan.roles.map(r => r.as), ['GameCube Controller 1', 'Wii Remote 2 + Nunchuk', 'GameCube Controller 2', 'Wii Remote 4 + Nunchuk']);
+});
+
 test('sports titles attach the Nunchuk, Resort adds MotionPlus and a Nunchuk only where the sport uses one, and real or keyboard players are handled', () => {
   const sports = buildLaunchPlan('sports', ['phone', 'keyboard', 'wiimote', 'dualsense']);
   assert.deepEqual(sports.config, ['Dolphin.Core.SIDevice0=0', 'Dolphin.Core.SIDevice1=0', 'Dolphin.Core.SIDevice2=0', 'Dolphin.Core.SIDevice3=0']);
@@ -198,6 +216,13 @@ test('on-screen binding tables come from the same table as the profiles', () => 
   assert.deepEqual(rows.find(r => r.action === 'Accelerate'), { action: 'Accelerate', dualsense: '✕ Cross', keyboard: 'X', phone: '2' });
   assert.equal(rows.find(r => r.action === 'Drift / hop').dualsense, 'R1 or R2');
   assert.equal(rows.find(r => r.action === 'Steer').keyboard, '← or →');
+  const brawl = brawlRows();
+  assert.deepEqual(brawl.map(r => r.action), ['Move', 'Attack', 'Special move', 'Smash attack', 'Jump', 'Shield', 'Grab', 'Pause']);
+  assert.deepEqual(brawl.find(r => r.action === 'Jump'), { action: 'Jump', dualsense: '△ Triangle or ○ Circle', keyboard: 'S or A', phone: 'C, or push the stick up' });
+  assert.deepEqual(brawl.find(r => r.action === 'Shield'), { action: 'Shield', dualsense: 'L1 or L2 or R1 or R2', keyboard: 'Space or C', phone: 'Z' });
+  assert.equal(brawl.find(r => r.action === 'Move').dualsense, 'Left stick');
+  assert.equal(brawl.find(r => r.action === 'Smash attack').dualsense, 'Right stick');
+  assert.equal(brawl.find(r => r.action === 'Smash attack').keyboard, 'An arrow key and X together', 'the keyboard has no C-stick, so it is said in words');
   assert.equal(remoteRows('phone').find(r => r.control === 'B').input, 'B');
   assert.equal(remoteRows('dualsense').find(r => r.control === 'Home').input, 'PS button');
   for (const name of Object.values(PHONE_TO_DSU)) assert.match(name, /^(Cross|R1|Square|Triangle|Share|Options|PS|Pad [NSWE]|L1|L2|L3|R3)$/);
@@ -217,8 +242,12 @@ test('the sports selector has 15 sports and 17 title entries, with Bowling and G
   }
   assert.deepEqual(SPORTS.filter(s => s.editions.some(e => e.requires.nunchuk)).map(s => s.id), ['boxing', 'archery', 'power-cruising', 'cycling']);
   assert.match(sportById('golf').editions[1].path[2], /Golf \(7th of 12\)/);
-  assert.deepEqual(activityNeeds('resort', 'archery'), { layout: 'remote', nunchuk: true, motionPlus: true });
-  assert.deepEqual(activityNeeds('mkw'), { layout: 'wheel', nunchuk: false, motionPlus: false });
+  assert.deepEqual(activityNeeds('resort', 'archery'), { layout: 'remote', nunchuk: true, motionPlus: true, pointer: true });
+  assert.deepEqual(activityNeeds('mkw'), { layout: 'wheel', nunchuk: false, motionPlus: false, pointer: true });
+  assert.deepEqual(activityNeeds('brawl'), { layout: 'remote', nunchuk: true, motionPlus: false, pointer: false }, 'Brawl: a Wii Remote and Nunchuk, never pointed');
+  assert.deepEqual(activityGuide('brawl', null, 'subspace'), { name: 'Super Smash Bros. Brawl', detail: 'The Subspace Emissary', path: BRAWL_MODES.find(m => m.id === 'subspace').path });
+  assert.deepEqual(activityGuide('brawl', null, 'online'), { name: 'Super Smash Bros. Brawl', detail: null, path: [] });
+  for (const mode of BRAWL_MODES.filter(m => !m.unavailable)) assert.ok(mode.path.length >= 3 && mode.players, mode.id);
   assert.deepEqual(activityGuide('mkw', null, 'vs-race'), { name: 'Mario Kart Wii', detail: 'VS Race', path: MKW_MODES.find(m => m.id === 'vs-race').path });
   assert.deepEqual(activityGuide('mkw', null, 'online').path, [], 'an unavailable mode never shows a path');
   const golf = activityGuide('resort', 'golf');
@@ -475,7 +504,7 @@ test('a game opens on the screen chosen for it, checked again once Dolphin has g
   await until(() => windows.calls.length >= 6);
   assert.equal(windows.calls[1].LRS_WAIT, '20000', 'it waits for Dolphin to open the window');
   assert.deepEqual(windows.moves, ['2544,45,1312,1038', '2544,45,1312,1038'], 'moved again when the first move did not hold');
-  assert.deepEqual(windows.window, { handle: '2428142', x: 2544, y: 45, width: 1312, height: 1038 });
+  assert.deepEqual(windows.window, { handle: '2428142', x: 2544, y: 45, width: 1312, height: 1038, framed: true });
 
   const untouched = fakeWindows();
   const g = await dolphinFixture(t, { manager: { displays: createDisplays({ run: untouched.run }) } });
@@ -493,17 +522,45 @@ test('a game opens on the screen chosen for it, checked again once Dolphin has g
   assert.deepEqual(unplugged.moves, [], 'a chosen screen that has been unplugged leaves the game on the main screen');
 });
 
+test('a game moved just as Dolphin goes full screen still ends up filling its screen', async t => {
+  // Placed on the second screen while Dolphin switches: full screen in name, the size it was being moved at.
+  const windows = fakeWindows({ race: 1 }), displays = createDisplays({ run: windows.run });
+  const f = await dolphinFixture(t, { manager: { displays, settleMs: 5 } });
+  await f.settings.save({ launch: { screen: SECOND } });
+  await displays.list();
+  await f.manager.launch({ title: 'mkw' });
+  await until(() => windows.moves.length === 2);
+  assert.deepEqual(windows.moves, ['2544,45,1312,1038', '1920,-212,2560,1600'], 'the move is checked and the window made to fill the screen');
+  assert.deepEqual(windows.window, { handle: '2428142', x: 1920, y: -212, width: 2560, height: 1600, framed: false });
+
+  // Already stuck small on the screen it was meant for: checked after placing, and put right.
+  const left = fakeWindows({ window: { x: 2544, y: 69, width: 1312, height: 1038, framed: false } }), seen = createDisplays({ run: left.run });
+  const g = await dolphinFixture(t, { manager: { displays: seen, settleMs: 5 } });
+  await g.settings.save({ launch: { screen: SECOND } });
+  await seen.list();
+  await g.manager.launch({ title: 'mkw' });
+  await until(() => left.moves.length === 1);
+  assert.deepEqual(left.window, { handle: '2428142', x: 1920, y: -212, width: 2560, height: 1600, framed: false });
+
+  // Stuck small on the main screen, as the game was in the screenshot: Move takes it to the other screen, full size.
+  const small = fakeWindows({ window: { x: 636, y: 290, width: 648, height: 500, framed: false } });
+  const h = await dolphinFixture(t, { manager: { displays: createDisplays({ run: small.run }) } });
+  await h.manager.launch({ title: 'mkw' });
+  await h.manager.moveTo('next');
+  assert.deepEqual(small.window, { handle: '2428142', x: 1920, y: -212, width: 2560, height: 1600, framed: false });
+});
+
 test('a running game moves to the other screen and the next game opens there too', async t => {
-  const windows = fakeWindows({ window: { x: 0, y: 0, width: 1920, height: 1080 } });
+  const windows = fakeWindows({ window: { x: 0, y: 0, width: 1920, height: 1080, framed: false } });
   const f = await dolphinFixture(t, { manager: { displays: createDisplays({ run: windows.run }) } });
   await assert.rejects(f.manager.moveTo(), { code: 'not-running' });
   await f.manager.launch({ title: 'mkw' });
   await f.manager.moveTo('next');
-  assert.deepEqual(windows.window, { handle: '2428142', x: 1920, y: -212, width: 2560, height: 1600 }, 'a full-screen game fills the 2560 × 1600 screen');
+  assert.deepEqual(windows.window, { handle: '2428142', x: 1920, y: -212, width: 2560, height: 1600, framed: false }, 'a full-screen game fills the 2560 × 1600 screen');
   assert.equal((await f.settings.load()).launch.screen, SECOND);
   assert.equal(f.manager.state().screen, SECOND, 'the console knows where the game is now');
   await f.manager.moveTo('next');
-  assert.deepEqual(windows.window, { handle: '2428142', x: 0, y: 0, width: 1920, height: 1080 });
+  assert.deepEqual(windows.window, { handle: '2428142', x: 0, y: 0, width: 1920, height: 1080, framed: false });
   assert.equal((await f.settings.load()).launch.screen, 'main');
   assert.equal(f.manager.state().screen, MAIN);
 

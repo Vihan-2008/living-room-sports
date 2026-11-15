@@ -4,14 +4,14 @@
 
 ## In short
 
-- **Automated checks:** all 126 tests pass (`python check.py`).
+- **Automated checks:** all 128 tests pass (`python check.py`).
 - **Installed build:** the portable build in `dist` ran end to end on this PC. It used its own Node.js, opened the Wii Menu in its own window and started Bowling. It stopped the game cleanly, and closing the window shut everything down.
-- **Not yet checked:** real hardware. Nothing here has run against real Dolphin with real discs, a physical phone or a DualSense. [Still to check](#still-to-check-on-real-hardware) lists exactly what to try.
+- **Not yet checked:** playing with real controllers. The real Dolphin has started Mario Kart Wii and Super Smash Bros. Brawl from their discs on this PC, but nothing has been played with a physical phone or a DualSense. [Still to check](#still-to-check-on-real-hardware) lists exactly what to try.
 
 ## How it was tested
 
 - **A stand-in Dolphin** (`tests/fixtures/StubDolphin.cs`, built by `tests/fixtures/make-test-console.ps1`). It records the command line it was given and writes a Dolphin-style log into the user folder it was handed. It closes like Dolphin when asked, and with `LRS_STUB_CRASH=1` it crashes with Windows' access-violation code two seconds in.
-- **Small disc images** carrying only real headers (game ID, Wii magic word, internal name) for Wii Sports, Wii Sports Resort and Mario Kart Wii.
+- **Small disc images** carrying only real headers (game ID, Wii magic word, internal name) for Wii Sports, Wii Sports Resort, Mario Kart Wii and Super Smash Bros. Brawl.
 - **A throwaway settings folder**, so this PC's real `%LOCALAPPDATA%\LivingRoomSports` and any real Dolphin folder were never touched.
 - **The in-app browser**, at 1280×720 (16:9), 1024×768 (4:3) and phone size (375×812), for the Wii Menu and the phone pages.
 - **The real launcher**, `dist\Living Room Sports\Living Room Sports.exe`, driving a real Edge window.
@@ -41,6 +41,8 @@
 | Installed build tested; portable build delivered | Ran the portable build; launcher tests build and run it with its own Node.js | Works |
 | Games open on the chosen screen and move between screens | Real Dolphin, full screen and borderless, running a tiny test program from a throwaway user folder: its window was moved from this PC's 1920 × 1080 main screen to its 2560 × 1600 screen at 200% and back. Then the real server with the stand-in: Game screen, Move to the other screen, and the phone's ⋯ menu | Works. Dolphin opens a small window and goes full screen a moment later on whichever screen it is on, so the move lands either way |
 | Phones recenter on the game's new screen | The real phone page in a fake browser; the console and server tests follow which screen the game is on. The prompt viewed at phone size, upright and in landscape, against a stand-in console | Works in tests. No physical phone was used |
+| A game moved while Dolphin goes full screen still fills its screen | Real Dolphin with Mario Kart Wii, moved to the second screen 600, 900 and 1200 ms after its window appeared; tests of the helper's report and of the console putting a stuck window right | Works, after a fix (below) |
+| Super Smash Bros. Brawl channel | The real disc's header read as RSBE01. The real Dolphin started it with the console's launch plan (a GameCube controller in port 1, a Wii Remote and Nunchuk for a phone) and reached the wrist-strap reminder and then the save-file prompt, full screen, with nothing in Dolphin's log. The channel, its tabs and Now playing viewed with the stand-in | Works. Not yet played with a controller |
 | Games drawn at the screen's resolution | Launch settings test; the setting checked against Dolphin's source, which picks the smallest whole multiple of the Wii's picture that covers the window and recalculates when the window changes size | Set. Not yet looked at with a disc |
 | Home › Wii Menu in a game returns to the Wii Menu | Real Dolphin, with the console's logger settings, wrote its warning to `Logs\dolphin.log` without a pop-up. The real server closed the stand-in within a second of the Wii Menu request appearing in its log | Works. Not yet tried from a real disc's HOME menu |
 
@@ -71,6 +73,7 @@ The phone setup page, which opens on Android steps for an Android phone, and the
 - **A crash report showed the previous session's log.** It now shows only the log written by the run that crashed.
 - **A destructive dialog started on its confirm button.** It now starts on Cancel.
 - **A game ending mid-transition could leave Now playing stuck on screen.** Screen changes are now made one at a time.
+- **A game could be left small and frameless.** A move that landed while Dolphin was switching to full screen put the window back to the size it was being moved at, so the game sat in a small box with no title bar. The console now stops setting the window's place once Dolphin changes its style, and makes a frameless window that does not fill its screen fill it.
 
 ## Still to check on real hardware
 
@@ -80,3 +83,4 @@ The phone setup page, which opens on Android steps for an Android phone, and the
 4. **From the shortcut.** Start a game and check that Dolphin comes to the front and that the Wii Menu comes back after you quit the game.
 5. **Two screens with a disc.** Set **Wii Options › Dolphin › Game screen** to the second screen, start Wii Sports and check that it fills that screen and looks sharp rather than soft. Press **Move to the other screen**. On a phone, point at the game and tap **Recenter**: the pointer should be in the middle of the game. Then press Home in the game and choose Wii Menu: the Wii Menu should come back.
 6. **Wii Sports Resort.** Start Golf and check that no message about the extension appears; start Archery and check that the Nunchuk works.
+7. **Super Smash Bros. Brawl.** Start a Brawl with a DualSense and a phone. Check that the DualSense plays as a GameCube controller (✕ attacks, △ jumps) and that the phone's stick moves its fighter and C jumps.

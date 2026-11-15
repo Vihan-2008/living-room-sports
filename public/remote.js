@@ -126,8 +126,9 @@ $('leave').onclick = () => {
 function applyActivity(next) {
   // The pointer is measured from where the device faced when it was last recentred, so a game that moves to a
   // screen somewhere else in the room leaves it aiming off the edge until the player recentres on the new one.
+  // A game that never uses the pointer has nothing to aim.
   const moved = activity.mode === 'game' && next.mode === 'game' && !!activity.screen && !!next.screen && next.screen !== activity.screen;
-  if (next.mode !== 'game') aimAt = null;
+  if (next.mode !== 'game' || next.pointer === false) aimAt = null;
   else if (moved && playsGames && motion === 'active') { aimAt = next.screen; navigator.vibrate?.([30, 60, 30]); }
   activity = next.mode === 'game' ? next : { mode: 'menu' };
   const nextLayout = activity.mode !== 'game' ? 'remote' : activity.layout === 'wheel' ? 'wheel' : activity.nunchuk ? 'nunchuk' : 'remote';

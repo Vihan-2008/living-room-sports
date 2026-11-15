@@ -87,7 +87,10 @@ export function profileText(lines) {
 const TITLE_SETUP = {
   mkw: { gamepadAs: 'gc', nunchuk: false, motionPlus: false, tag: 'Kart' },
   sports: { gamepadAs: 'wiimote', nunchuk: true, motionPlus: false, tag: 'Sports' },
-  resort: { gamepadAs: 'wiimote', nunchuk: 'sport', motionPlus: true, tag: 'Resort' }
+  resort: { gamepadAs: 'wiimote', nunchuk: 'sport', motionPlus: true, tag: 'Resort' },
+  // Brawl plays best on a GameCube controller, which it supports natively. A phone is a Wii Remote and Nunchuk, the
+  // one Wii Remote style with a stick.
+  brawl: { gamepadAs: 'gc', nunchuk: true, motionPlus: false, tag: 'Brawl' }
 };
 
 // players: four entries from PLAYER_TYPES; sport: the selector entry being started, if any. Returns everything

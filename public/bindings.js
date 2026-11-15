@@ -53,7 +53,7 @@ export const KEYBOARD_MOTION = {
   'Tilt/Left': 'Q', 'Tilt/Right': 'E', 'Tilt/Forward': 'T', 'Tilt/Backward': 'G', 'Shake/X': 'H', 'Shake/Y': 'H', 'Shake/Z': 'H'
 };
 
-// GameCube controller (Mario Kart Wii with a DualSense or keyboard).
+// GameCube controller (Mario Kart Wii and Brawl with a DualSense or keyboard).
 export const GCPAD = {
   'Buttons/A': { dualsense: 'Button S', keyboard: 'X' },
   'Buttons/B': { dualsense: 'Button W', keyboard: 'Z' },
@@ -106,25 +106,40 @@ export function label(kind, control) {
   return [...new Set(names)].join(' or ');
 }
 
-// Mario Kart Wii controls, per control style. The GameCube layout is what the DualSense and keyboard drive;
-// the phone is a Wii Remote held sideways (the Wii Wheel style).
+// Controls for the games a DualSense and the keyboard play as a GameCube controller. gc: the GameCube controls
+// that do it, which the DualSense and keyboard columns are worked out from; phone: what a phone does instead;
+// keyboard: said in words where the keyboard has no key for it.
+// Mario Kart Wii: the phone is a Wii Remote held sideways (the Wii Wheel style).
 export const MKW_ACTIONS = [
-  { action: 'Steer', gc: ['Main Stick/Left', 'Main Stick/Right'], wheel: 'Tilt the phone like a wheel' },
-  { action: 'Accelerate', gc: 'Buttons/A', wheel: '2' },
-  { action: 'Brake / reverse', gc: 'Buttons/B', wheel: '1' },
-  { action: 'Drift / hop', gc: 'Triggers/R', wheel: 'B' },
-  { action: 'Use item', gc: 'Triggers/L', wheel: '✚ (any direction)' },
-  { action: 'Trick / wheelie', gc: 'D-Pad/Up', wheel: 'Flick the phone up' },
-  { action: 'Pause', gc: 'Buttons/Start', wheel: '+' }
+  { action: 'Steer', gc: ['Main Stick/Left', 'Main Stick/Right'], phone: 'Tilt the phone like a wheel' },
+  { action: 'Accelerate', gc: 'Buttons/A', phone: '2' },
+  { action: 'Brake / reverse', gc: 'Buttons/B', phone: '1' },
+  { action: 'Drift / hop', gc: 'Triggers/R', phone: 'B' },
+  { action: 'Use item', gc: 'Triggers/L', phone: '✚ (any direction)' },
+  { action: 'Trick / wheelie', gc: 'D-Pad/Up', phone: 'Flick the phone up' },
+  { action: 'Pause', gc: 'Buttons/Start', phone: '+' }
 ];
-export function mkwRows() {
-  return MKW_ACTIONS.map(row => ({
+// Super Smash Bros. Brawl, as the game sets each style up: the phone is a Wii Remote and Nunchuk.
+export const BRAWL_ACTIONS = [
+  { action: 'Move', gc: ['Main Stick/Up', 'Main Stick/Down', 'Main Stick/Left', 'Main Stick/Right'], keyboard: 'Arrow keys', phone: 'Stick' },
+  { action: 'Attack', gc: 'Buttons/A', phone: 'A' },
+  { action: 'Special move', gc: 'Buttons/B', phone: 'B' },
+  { action: 'Smash attack', gc: ['C-Stick/Up', 'C-Stick/Down', 'C-Stick/Left', 'C-Stick/Right'], keyboard: 'An arrow key and X together', phone: 'Push the stick hard and press A' },
+  { action: 'Jump', gc: ['Buttons/X', 'Buttons/Y'], phone: 'C, or push the stick up' },
+  { action: 'Shield', gc: ['Triggers/L', 'Triggers/R'], phone: 'Z' },
+  { action: 'Grab', gc: 'Buttons/Z', phone: 'Z and A together' },
+  { action: 'Pause', gc: 'Buttons/Start', phone: '+' }
+];
+function gcRows(actions) {
+  return actions.map(row => ({
     action: row.action,
     dualsense: label('dualsense', list(row.gc).flatMap(key => list(GCPAD[key].dualsense))),
-    keyboard: label('keyboard', list(row.gc).flatMap(key => list(GCPAD[key].keyboard))),
-    phone: row.wheel
+    keyboard: row.keyboard || label('keyboard', list(row.gc).flatMap(key => list(GCPAD[key].keyboard))),
+    phone: row.phone
   }));
 }
+export const mkwRows = () => gcRows(MKW_ACTIONS);
+export const brawlRows = () => gcRows(BRAWL_ACTIONS);
 
 // Wii Remote controls for the sports titles, per controller type.
 export function remoteRows(kind) {

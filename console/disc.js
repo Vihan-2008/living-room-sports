@@ -2,6 +2,7 @@
 import { open, readdir, stat } from 'node:fs/promises';
 import { join, extname, basename } from 'node:path';
 import { inflateSync } from 'node:zlib';
+import { discFits } from '../public/catalog.js';
 
 export const DISC_EXTENSIONS = ['.iso', '.gcm', '.wbfs', '.rvz', '.wia', '.gcz', '.ciso'];
 const WII_MAGIC = 0x5d1c9ea3, GC_MAGIC = 0xc2339f3d;
@@ -10,7 +11,8 @@ const WII_MAGIC = 0x5d1c9ea3, GC_MAGIC = 0xc2339f3d;
 export const TITLES = {
   mkw: { name: 'Mario Kart Wii', pattern: /^RMC[A-Z]01$/ },
   sports: { name: 'Wii Sports', pattern: /^RSP[A-Z]01$/ },
-  resort: { name: 'Wii Sports Resort', pattern: /^RZT[A-Z]01$/ }
+  resort: { name: 'Wii Sports Resort', pattern: /^RZT[A-Z]01$/ },
+  brawl: { name: 'Super Smash Bros. Brawl', pattern: /^RSB[A-Z]01$/ }
 };
 const REGIONS = { E: 'USA', P: 'Europe', J: 'Japan', K: 'Korea', W: 'Taiwan' };
 
@@ -100,7 +102,7 @@ export async function scanLibrary(folders, files = [], identifyFn = identify) {
 export function chooseTitles(discs, chosen = {}) {
   const out = {};
   for (const key of Object.keys(TITLES)) {
-    const matches = discs.filter(d => d.kind === key || (d.kind === 'pack' && key !== 'mkw'));
+    const matches = discs.filter(d => discFits(d.kind, key));
     const keep = matches.find(d => d.path === chosen[key]);
     const pick = keep || matches.find(d => d.kind === key) || matches[0];
     out[key] = pick ? { path: pick.path, id: pick.id, region: pick.region, title: pick.title, pack: pick.kind === 'pack' } : null;

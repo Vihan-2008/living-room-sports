@@ -7,7 +7,7 @@ import { homedir } from 'node:os';
 import { readValue, createJournal } from './ini.js';
 import { buildLaunchPlan, DSU_NAME } from './profiles.js';
 import { identify } from './disc.js';
-import { findScreen, nextScreen, placeWindow } from './screens.js';
+import { findScreen, nextScreen, placeWindow, fillsScreen } from './screens.js';
 
 export const exists = path => access(path).then(() => true, () => false);
 
@@ -284,14 +284,25 @@ export function createDolphinManager({ settings, dataDir, dsuPort = () => null, 
     return state();
   }
 
+  // Full screen in name (no title bar) but not filling the screen: what a move that lands while Dolphin is going
+  // full screen can leave behind.
+  const stuck = (window, screen) => window.framed === false && !fillsScreen(window, screen);
+
+  // A move that lands while Dolphin goes full screen leaves the window full screen at the size it was being moved
+  // at, so a window left like that is made to fill the screen.
+  async function moveWindow(window, from, target) {
+    const { moved } = await displays.move(window.handle, placeWindow(window, from, target));
+    if (moved && stuck(moved, target)) await displays.move(window.handle, placeWindow(moved, target, target));
+  }
+
   // Dolphin opens its game window on the main screen: small at first, then full screen a moment later, on
   // whichever screen the window is on by then. So the window is moved once it appears and checked again after.
   async function placeGame(current, choice) {
     let { window } = await displays.gameWindow(current.child.pid, 20000);
     for (let attempt = 0; attempt < 3 && window && session === current; attempt++) {
       const target = findScreen(displays.screens, choice), from = findScreen(displays.screens, window.screen);
-      if (!target || !from || target.id === from.id) return;
-      await displays.move(window.handle, placeWindow(window, from, target));
+      if (!target || !from || (target.id === from.id && !stuck(window, target))) return;
+      await moveWindow(window, from, target);
       await delay(settleMs);
       ({ window } = await displays.gameWindow(current.child.pid, 0));
     }
@@ -309,7 +320,7 @@ export function createDolphinManager({ settings, dataDir, dsuPort = () => null, 
       const from = findScreen(displays.screens, window.screen);
       const target = to === 'next' ? nextScreen(displays.screens, from?.id) : findScreen(displays.screens, to);
       if (!from || !target) throw new LaunchError('one-screen', 'Only one screen is connected.', 'Connect another screen, then try again.');
-      if (target.id !== from.id) await displays.move(window.handle, placeWindow(window, from, target));
+      if (target.id !== from.id || stuck(window, target)) await moveWindow(window, from, target);
       current.screen = target.id;
       await settings.save({ launch: { screen: target.primary ? 'main' : target.id } });
       changed();

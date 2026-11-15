@@ -1,6 +1,6 @@
 # Living Room Sports
 
-A Wii Menu for your PC. It starts your own copies of **Wii Sports**, **Wii Sports Resort** and **Mario Kart Wii** in the Dolphin emulator. Phones become Wii Remotes, with pointer, buttons and motion. A DualSense or the keyboard works too. It also has an original arcade of five sports and a kart racer that runs in the window itself, with no games needed.
+A Wii Menu for your PC. It starts your own copies of **Wii Sports**, **Wii Sports Resort**, **Mario Kart Wii** and **Super Smash Bros. Brawl** in the Dolphin emulator. Phones become Wii Remotes, with pointer, buttons and motion. A DualSense or the keyboard works too. It also has an original arcade of five sports and a kart racer that runs in the window itself, with no games needed.
 
 No Nintendo games, firmware or artwork are included, and this project is not affiliated with Nintendo. Use discs you own.
 
@@ -65,6 +65,23 @@ The channel shows the game's own modes: **Grand Prix**, **Time Trials**, **VS Ra
 | Trick / wheelie | D-pad ↑ | I | Flick the phone up |
 | Pause | Options | Enter | + |
 
+### Super Smash Bros. Brawl
+
+The channel lists **Brawl**, **The Subspace Emissary**, **Classic** and **Training**, each with its menu path; online play is listed as unavailable. Brawl plays best on a GameCube controller and supports one natively, so a DualSense or the keyboard is one. A phone is a Wii Remote and Nunchuk, the Wii Remote style that has a stick: hold it on its side, with the stick under your left thumb and A and B under your right.
+
+| Action | DualSense | Keyboard | Phone (Wii Remote + Nunchuk) |
+| --- | --- | --- | --- |
+| Move | Left stick | Arrow keys | Stick |
+| Attack | ✕ Cross | X | A |
+| Special move | □ Square | Z | B |
+| Smash attack | Right stick | An arrow key and X together | Push the stick hard and press A |
+| Jump | △ Triangle or ○ Circle | S or A | C, or push the stick up |
+| Shield | L1, L2, R1 or R2 | Space or C | Z |
+| Grab | Touch pad click or Create | Q | Z and A together |
+| Pause | Options | Enter | + |
+
+The first time it starts, Brawl asks to create a save file; choose **Yes**.
+
 ### While a game runs
 
 The Wii Menu waits behind Dolphin with a **Now playing** screen. Any of these brings you back to it:
@@ -76,18 +93,18 @@ The Wii Menu waits behind Dolphin with a **Now playing** screen. Any of these br
 
 Each one asks Dolphin to close the way its own close button does, so a game is never killed mid-save. Unless a Wii Menu has been installed into Dolphin from a real Wii, Dolphin has none to go to, and a game sent there would hang. The console sees that request in Dolphin's log and closes the game instead. Closing the Wii Menu window does not end a running game. The game keeps all its controllers, and the Wii Menu comes back when the game ends.
 
-Games open on the screen chosen in **Wii Options › Dolphin › Game screen**. To move a game that is already running, press **Move to the other screen** on Now playing, or use a phone's **⋯** menu. The next game then opens on that screen too. A phone aims from wherever it faced when it was last recentred, so after a move each phone in the game says **Point at the second screen, then tap Recenter**. Tapping it while pointing at the game puts the pointer back in the middle; until then it sits at the edge, and games that steer with the pointer, such as Wii Sports Resort's Swordplay and Archery, aim off to one side. Dolphin runs borderless full screen for these launches and draws the game at the size of its window, not at the Wii's own 640 × 528. It uses the smallest whole multiple of the Wii's picture that covers the screen, then fits it exactly: three times on a 1920 × 1080 screen, and four times on a 2560 × 1600 screen at 200% scaling. When the game moves to another screen, the resolution changes with it. This is Dolphin's **Auto (Window Size)** internal resolution, set only for these launches.
+Games open on the screen chosen in **Wii Options › Dolphin › Game screen**. To move a game that is already running, press **Move to the other screen** on Now playing, or use a phone's **⋯** menu. The next game then opens on that screen too. A phone aims from wherever it faced when it was last recentred, so after a move each phone in the game says **Point at the second screen, then tap Recenter**. Brawl never uses the pointer, so it does not ask. Tapping it while pointing at the game puts the pointer back in the middle; until then it sits at the edge, and games that steer with the pointer, such as Wii Sports Resort's Swordplay and Archery, aim off to one side. Dolphin runs borderless full screen for these launches and draws the game at the size of its window, not at the Wii's own 640 × 528. It uses the smallest whole multiple of the Wii's picture that covers the screen, then fits it exactly: three times on a 1920 × 1080 screen, and four times on a 2560 × 1600 screen at 200% scaling. When the game moves to another screen, the resolution changes with it. This is Dolphin's **Auto (Window Size)** internal resolution, set only for these launches.
 
 If Dolphin closes unexpectedly, the Wii Menu says what happened, for example a crash with Windows' error code. It also shows the end of Dolphin's log for that run. During these launches Dolphin writes its warnings to that log instead of showing pop-ups that need a mouse. None of the launch settings are saved into Dolphin's own files.
 
 ## Controllers
 
-| | In the Wii Menu | In Wii Sports and Resort | In Mario Kart Wii |
-| --- | --- | --- | --- |
-| **Phone** | Points like a Wii Remote; buttons on screen | Wii Remote with motion and MotionPlus; Nunchuk on screen when a sport needs it | Wii Wheel: hold it sideways and tilt |
-| **DualSense** | Left stick moves the hand, ✕ selects, ○ goes back, PS is Home | Wii Remote: gyro points and motion swings (R3 recentres) | GameCube controller layout |
-| **Keyboard and mouse** | Mouse, arrow keys, Enter, Esc, Page Up / Page Down | Mouse points; W A S D F R swing, Q E tilt | GameCube layout on the keyboard |
-| **Wii Remote** | — | Dolphin's own real-Wii-Remote support | Dolphin's own real-Wii-Remote support |
+| | In the Wii Menu | In Wii Sports and Resort | In Mario Kart Wii | In Brawl |
+| --- | --- | --- | --- | --- |
+| **Phone** | Points like a Wii Remote; buttons on screen | Wii Remote with motion and MotionPlus; Nunchuk on screen when a sport needs it | Wii Wheel: hold it sideways and tilt | Wii Remote and Nunchuk: a stick and buttons on screen |
+| **DualSense** | Left stick moves the hand, ✕ selects, ○ goes back, PS is Home | Wii Remote: gyro points and motion swings (R3 recentres) | GameCube controller layout | GameCube controller layout |
+| **Keyboard and mouse** | Mouse, arrow keys, Enter, Esc, Page Up / Page Down | Mouse points; W A S D F R swing, Q E tilt | GameCube layout on the keyboard | GameCube layout on the keyboard |
+| **Wii Remote** | — | Dolphin's own real-Wii-Remote support | Dolphin's own real-Wii-Remote support | Dolphin's own real-Wii-Remote support |
 
 Some sports need a Nunchuk (Boxing, Archery, Power Cruising and Cycling). All of Resort needs MotionPlus. Each selector entry shows this, along with how each controller copes. Boxing, Power Cruising and Cycling expect two hands, so with one phone or a DualSense they work with limits; each entry explains how.
 
@@ -108,7 +125,7 @@ The console writes these layouts into Dolphin for each game and puts Dolphin's o
 
 Phones and iPads need the same Wi-Fi as the PC; guest networks that keep devices apart will not work. Open **Connect controllers** (the controller button in the bottom-right corner) and scan the code with each one's camera. Up to four join. Each takes the next free player number, and a phone that drops out gets its number back when it returns.
 
-The phone shows a Wii Remote: pointer, D-pad, A, B, −, Home, +, 1 and 2. In a sport that needs a Nunchuk it adds C, Z and a stick. In Mario Kart Wii it turns into a wheel. The **⋯** button shows the menu path for the running game, recentres the pointer, moves the game to the PC's other screen, quits the game (tap twice), or leaves.
+The phone shows a Wii Remote: pointer, D-pad, A, B, −, Home, +, 1 and 2. In a sport that needs a Nunchuk, and in Brawl, it adds C, Z and a stick. In Mario Kart Wii it turns into a wheel. The **⋯** button shows the menu path for the running game, recentres the pointer, moves the game to the PC's other screen, quits the game (tap twice), or leaves.
 
 The controller follows the screen. Upright, the remote stands up. In landscape it lies across the screen with the D-pad under your left thumb and A and B under your right, and the Nunchuk sits to its left. Either way, **the top edge of the screen is the end you point at the TV**. The wheel is always wide, so on an upright screen it is drawn across and you turn the phone to hold it. The layout only changes once the phone has been still for a moment, so a swing that tips the screen does not rearrange the buttons mid-game. On an iPad everything is drawn larger, and the iPad follows the same motion steps as an iPhone.
 

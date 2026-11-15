@@ -1,9 +1,9 @@
-// The channels' own screens: the Wii Sports selector, the Mario Kart Wii channel, and the screen shown
-// while Dolphin is running a game.
+// The channels' own screens: the Wii Sports selector, the Mario Kart Wii and Super Smash Bros. Brawl channels,
+// and the screen shown while Dolphin is running a game.
 import { sportIcon, drawChannel } from './menu-art.js';
 import { h, fill, art, button, frame, segmented, status, steps } from './menu-ui.js';
-import { SPORTS, sportById, editionOf, TITLE_NAMES, SUPPORT_TEXT, CONTROLLER_NAMES, MKW_MODES } from './catalog.js';
-import { mkwRows } from './bindings.js';
+import { SPORTS, sportById, editionOf, TITLE_NAMES, SUPPORT_TEXT, CONTROLLER_NAMES, MODES, modeOf } from './catalog.js';
+import { mkwRows, brawlRows } from './bindings.js';
 import { PLAYER_COLORS } from './menu-input.js';
 
 const PLAYER_KIND_NAMES = { dualsense: 'DualSense', phone: 'Phone', keyboard: 'Keyboard and mouse', wiimote: 'Real Wii Remote', off: 'Nobody' };
@@ -96,25 +96,37 @@ function sportsView(ctx) {
   };
 }
 
-// ---- Mario Kart Wii -----------------------------------------------------------------------------
-function mkwView(ctx) {
-  let mode = MKW_MODES.find(m => m.id === ctx.state.settings.menu.lastMode && !m.unavailable) || MKW_MODES[0];
+// ---- Mario Kart Wii and Super Smash Bros. Brawl ---------------------------------------------------
+// Both list the game's modes, and play on a DualSense or the keyboard as a GameCube controller.
+const MODE_CHANNELS = {
+  mkw: {
+    rows: mkwRows, phoneColumn: 'Phone (Wii Wheel)', phoneAs: 'held sideways like a Wii Wheel',
+    controlsNote: 'A DualSense or the keyboard plays as a GameCube controller, which Mario Kart Wii supports natively. A phone is a Wii Remote held sideways: tilt it to steer.'
+  },
+  brawl: {
+    rows: brawlRows, phoneColumn: 'Phone (Wii Remote + Nunchuk)', phoneAs: 'as a Wii Remote and Nunchuk',
+    controlsNote: 'A DualSense or the keyboard plays as a GameCube controller, the way Brawl plays best. A phone is a Wii Remote and Nunchuk: hold it on its side, the stick under your left thumb.'
+  }
+};
+
+function modesView(ctx, title) {
+  const channel = MODE_CHANNELS[title], modes = MODES[title], name = TITLE_NAMES[title];
+  let mode = modeOf(title, ctx.state.settings.menu.modes[title]) || modes[0];
   let tab = 'start';
-  const modeButtons = MKW_MODES.map(item => h('button', { type: 'button', class: 'mode', 'aria-pressed': 'false', dataset: { mode: item.id },
-    onClick: () => { mode = item; if (!item.unavailable) ctx.save({ menu: { lastMode: item.id } }); render(); } },
+  const modeButtons = modes.map(item => h('button', { type: 'button', class: 'mode', 'aria-pressed': 'false', dataset: { mode: item.id },
+    onClick: () => { mode = item; if (!item.unavailable) ctx.save({ menu: { modes: { [title]: item.id } } }); render(); } },
   h('span', { class: 'mode-name' }, item.name), h('span', { class: 'mode-players' }, item.unavailable ? 'Unavailable' : `${item.players} ${item.players === '1' ? 'player' : 'players'}`)));
   const tabs = segmented([{ value: 'start', label: 'How to start' }, { value: 'controls', label: 'Controls' }, { value: 'players', label: 'Players' }], tab, value => { tab = value; render(); }, { label: 'Show', className: 'tabs' });
-  const body = h('div', { class: 'mkw-body scroll' });
-  const start = button('Start Mario Kart Wii', () => launch(), { kind: 'primary', sound: 'start' });
-  const el = frame({ title: 'Mario Kart Wii', className: 'mkw-screen', onBack: () => ctx.back(),
-    body: h('div', { class: 'mkw-layout' }, h('div', { class: 'modes', role: 'group', 'aria-label': 'Modes' }, modeButtons), h('div', { class: 'mkw-panel panel' }, tabs, body)),
+  const body = h('div', { class: 'modes-body scroll' });
+  const start = button(`Start ${name}`, () => launch(), { kind: 'primary', sound: 'start' });
+  const el = frame({ title: name, className: `modes-screen ${title}-screen`, onBack: () => ctx.back(),
+    body: h('div', { class: 'modes-layout' }, h('div', { class: 'modes', role: 'group', 'aria-label': 'Modes' }, modeButtons), h('div', { class: 'modes-panel panel' }, tabs, body)),
     actions: [start] });
 
   function controlsTable() {
-    const rows = mkwRows();
     return h('table', { class: 'bindings' },
-      h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'DualSense'), h('th', {}, 'Keyboard'), h('th', {}, 'Phone (Wii Wheel)'))),
-      h('tbody', {}, rows.map(row => h('tr', {}, h('th', {}, row.action), h('td', {}, row.dualsense), h('td', {}, row.keyboard), h('td', {}, row.phone)))));
+      h('thead', {}, h('tr', {}, h('th', {}, ''), h('th', {}, 'DualSense'), h('th', {}, 'Keyboard'), h('th', {}, channel.phoneColumn))),
+      h('tbody', {}, channel.rows().map(row => h('tr', {}, h('th', {}, row.action), h('td', {}, row.dualsense), h('td', {}, row.keyboard), h('td', {}, row.phone)))));
   }
 
   function playersList() {
@@ -122,7 +134,7 @@ function mkwView(ctx) {
     return h('div', {},
       h('ul', { class: 'roles' }, players.map((kind, i) => {
         const phone = ctx.roster[i];
-        const as = kind === 'phone' ? (phone?.connected ? `${phone.name}'s phone, held sideways like a Wii Wheel` : 'A phone, held sideways like a Wii Wheel (not connected yet)')
+        const as = kind === 'phone' ? (phone?.connected ? `${phone.name}'s phone, ${channel.phoneAs}` : `A phone, ${channel.phoneAs} (not connected yet)`)
           : kind === 'dualsense' || kind === 'keyboard' ? `${PLAYER_KIND_NAMES[kind]}, as a GameCube controller` : kind === 'wiimote' ? 'Real Wii Remote, paired in Dolphin' : 'Nobody';
         return h('li', {}, h('span', { class: 'role-player', style: { background: PLAYER_COLORS[i] } }, `P${i + 1}`), h('span', {}, as));
       })),
@@ -132,21 +144,21 @@ function mkwView(ctx) {
   function render() {
     const state = ctx.state;
     modeButtons.forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === mode.id)));
-    const blocker = titleBlocker(state, 'mkw');
-    if (tab === 'start') fill(body, 
+    const blocker = titleBlocker(state, title);
+    if (tab === 'start') fill(body,
       blocker ? status(blocker) : null,
       h('h2', {}, mode.name), h('p', { class: mode.unavailable ? 'note' : 'muted' }, mode.detail),
       mode.path.length ? h('h3', {}, 'After it starts') : null, mode.path.length ? steps(mode.path) : null);
-    else if (tab === 'controls') fill(body, controlsTable(), h('p', { class: 'small muted' }, 'A DualSense or the keyboard plays as a GameCube controller, which Mario Kart Wii supports natively. A phone is a Wii Remote held sideways: tilt it to steer.'));
+    else if (tab === 'controls') fill(body, controlsTable(), h('p', { class: 'small muted' }, channel.controlsNote));
     else fill(body, playersList());
     start.disabled = !!mode.unavailable;
-    start.querySelector('.wbtn-label').textContent = blocker ? 'Set up' : 'Start Mario Kart Wii';
+    start.querySelector('.wbtn-label').textContent = blocker ? 'Set up' : `Start ${name}`;
     start.dataset.sound = blocker ? 'select' : 'start';
   }
 
   async function launch() {
-    if (titleBlocker(ctx.state, 'mkw')) return ctx.go('setup');
-    await ctx.launch('mkw', null);
+    if (titleBlocker(ctx.state, title)) return ctx.go('setup');
+    await ctx.launch(title, null);
   }
 
   return {
@@ -180,10 +192,10 @@ function playingView(ctx) {
   function render(state) {
     const { title, sport, roles, stopping } = state.dolphin;
     if (!title) return;
-    shown = title === 'mkw' ? 'mkw' : 'sports';
+    shown = title === 'resort' ? 'sports' : title;
     const item = sport ? sportById(sport) : null;
     const edition = item ? editionOf(item, title) : null;
-    const mode = title === 'mkw' ? MKW_MODES.find(m => m.id === state.settings.menu.lastMode) : null;
+    const mode = modeOf(title, state.settings.menu.modes[title]);
     const path = edition?.path || mode?.path || [];
     fill(info, 
       h('h2', {}, item ? `${item.name}` : TITLE_NAMES[title]),
@@ -206,4 +218,4 @@ function playingView(ctx) {
   return { el, update: render, dispose: () => cancelAnimationFrame(raf), back: () => { confirmClose(); return true; } };
 }
 
-export const channelViews = { sports: sportsView, mkw: mkwView, playing: playingView };
+export const channelViews = { sports: sportsView, mkw: ctx => modesView(ctx, 'mkw'), brawl: ctx => modesView(ctx, 'brawl'), playing: playingView };
