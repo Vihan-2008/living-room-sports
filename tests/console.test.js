@@ -210,6 +210,26 @@ test('sports titles attach the Nunchuk, Resort adds MotionPlus and a Nunchuk onl
   assert.equal(Object.keys(wiimoteProfile({ kind: 'phone', index: 0 })).filter(k => k.startsWith('Nunchuk')).length, 0);
 });
 
+test('on the two-in-one disc every Wii Remote has MotionPlus, since its own menu can start Resort from either channel', () => {
+  // Started as Wii Sports Tennis, then switched to Resort's Table Tennis on the disc's menu: Resort must accept it.
+  const tennis = buildLaunchPlan('sports', ['phone', 'keyboard', 'off', 'off'], { sport: 'tennis', pack: true });
+  for (const profile of tennis.profiles) {
+    assert.match(profile.text, /Extension\/Attach MotionPlus = True/, `${profile.name} has MotionPlus`);
+    assert.match(profile.text, /Extension = None/, `${profile.name} has nothing in the MotionPlus for Resort to refuse`);
+  }
+  assert.deepEqual(tennis.roles.slice(0, 2).map(r => r.as), ['Wii Remote 1 + MotionPlus', 'Wii Remote 2 + MotionPlus']);
+  const boxing = buildLaunchPlan('sports', ['phone', 'off', 'off', 'off'], { sport: 'boxing', pack: true });
+  assert.equal(boxing.roles[0].as, 'Wii Remote 1 + Nunchuk + MotionPlus', 'Boxing still gets its Nunchuk');
+  const archery = buildLaunchPlan('resort', ['phone', 'off', 'off', 'off'], { sport: 'archery', pack: true });
+  assert.equal(archery.roles[0].as, 'Wii Remote 1 + Nunchuk + MotionPlus');
+  assert.equal(buildLaunchPlan('sports', ['phone', 'off', 'off', 'off'], { sport: 'tennis' }).roles[0].as, 'Wii Remote 1 + Nunchuk',
+    'a Wii Sports disc on its own keeps the Nunchuk and no MotionPlus');
+  for (const title of ['mkw', 'brawl']) {
+    const players = ['dualsense', 'phone', 'off', 'off'];
+    assert.deepEqual(buildLaunchPlan(title, players, { pack: true }), buildLaunchPlan(title, players), `${title} is never on the disc`);
+  }
+});
+
 test('on-screen binding tables come from the same table as the profiles', () => {
   const rows = mkwRows();
   assert.deepEqual(rows.map(r => r.action), ['Steer', 'Accelerate', 'Brake / reverse', 'Drift / hop', 'Use item', 'Trick / wheelie', 'Pause']);
@@ -448,6 +468,23 @@ test('stopping asks Dolphin to close; missing setup and a foreign Dolphin give t
   await assert.rejects(g.manager.launch({ title: 'mkw' }), error => error.code === 'dolphin-open' && /Close Dolphin/.test(error.step));
   await g.manager.stop({ foreign: true });
   assert.deepEqual(g.closed, [[999, undefined]]);
+});
+
+test('a Wii Sports launch from the two-in-one disc writes Wii Remotes with MotionPlus; from a Wii Sports disc, without', async t => {
+  const f = await dolphinFixture(t, { players: ['phone', 'phone', 'off', 'off'] });
+  const pack = join(f.dir, 'pack.rvz'), sports = join(f.dir, 'sports.iso');
+  await writeFile(pack, images.rvz('SP2P01', 'Wii Sports + Wii Sports Resort'));
+  await writeFile(sports, images.iso('RSPE01', 'Wii Sports'));
+  const phoneProfile = () => readFile(join(f.userDir, 'Config', 'Profiles', 'Wiimote', 'Living Room P2 Sports phone.ini'), 'utf8');
+  await f.settings.save({ titles: { sports: pack } });
+  await f.manager.launch({ title: 'sports', sport: 'tennis' });
+  assert.match(await phoneProfile(), /Extension\/Attach MotionPlus = True/);
+  assert.match(await readFile(join(f.userDir, 'GameSettings', 'SP2P01.ini'), 'utf8'), /WiimoteProfile2 = Living Room P2 Sports phone/);
+  await f.manager.stop();
+  await f.settings.save({ titles: { sports } });
+  await f.manager.launch({ title: 'sports', sport: 'tennis' });
+  assert.match(await phoneProfile(), /Extension\/Attach MotionPlus = False/);
+  await f.manager.stop();
 });
 
 test('with "use Dolphin\'s own controller settings", no profile or game setting is written', async t => {

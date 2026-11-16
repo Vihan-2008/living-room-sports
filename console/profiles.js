@@ -93,11 +93,17 @@ const TITLE_SETUP = {
   brawl: { gamepadAs: 'gc', nunchuk: true, motionPlus: false, tag: 'Brawl' }
 };
 
-// players: four entries from PLAYER_TYPES; sport: the selector entry being started, if any. Returns everything
-// one launch needs.
-export function buildLaunchPlan(title, players, { sport = null, keyboardP1 = true, deadzone = 0.1, dualsenseNames = DUALSENSE_NAMES } = {}) {
-  const known = TITLE_SETUP[title];
-  if (!known) throw new Error(`Unknown title ${title}`);
+// The 2-in-1 "Wii Sports + Wii Sports Resort" disc opens on its own menu, where either game can be started
+// whichever channel launched it. Its Wii Remotes have to suit both: MotionPlus, which Resort insists on and Wii
+// Sports ignores, and a Nunchuk only for a sport that uses one, as Resort turns one away otherwise.
+const PACK_SETUP = { nunchuk: 'sport', motionPlus: true };
+const onPack = title => title === 'sports' || title === 'resort';
+
+// players: four entries from PLAYER_TYPES; sport: the selector entry being started, if any; pack: the game file
+// is the 2-in-1 disc. Returns everything one launch needs.
+export function buildLaunchPlan(title, players, { sport = null, pack = false, keyboardP1 = true, deadzone = 0.1, dualsenseNames = DUALSENSE_NAMES } = {}) {
+  if (!TITLE_SETUP[title]) throw new Error(`Unknown title ${title}`);
+  const known = pack && onPack(title) ? { ...TITLE_SETUP[title], ...PACK_SETUP } : TITLE_SETUP[title];
   const setup = { ...known, nunchuk: known.nunchuk === 'sport' ? activityNeeds(title, sport).nunchuk : known.nunchuk };
   const profiles = [], controls = {}, config = [], roles = [];
   let gcPort = 0, padIndex = 0;

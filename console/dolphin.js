@@ -6,7 +6,7 @@ import { join, dirname, basename } from 'node:path';
 import { homedir } from 'node:os';
 import { readValue, createJournal } from './ini.js';
 import { buildLaunchPlan, DSU_NAME } from './profiles.js';
-import { identify } from './disc.js';
+import { identify, recognize } from './disc.js';
 import { findScreen, nextScreen, placeWindow, fillsScreen } from './screens.js';
 
 export const exists = path => access(path).then(() => true, () => false);
@@ -226,7 +226,8 @@ export function createDolphinManager({ settings, dataDir, dsuPort = () => null, 
     await journal.restore();
     let plan = { roles: [], config: [] };
     if (s.controls.layouts === 'console') {
-      plan = buildLaunchPlan(request.title, s.controls.players, { sport: request.sport, keyboardP1: s.controls.keyboardP1, deadzone: s.controls.gameDeadzone });
+      plan = buildLaunchPlan(request.title, s.controls.players, { sport: request.sport, pack: recognize(disc.id, disc.title) === 'pack',
+        keyboardP1: s.controls.keyboardP1, deadzone: s.controls.gameDeadzone });
       for (const profile of plan.profiles) {
         const folder = join(userDir, 'Config', 'Profiles', profile.type);
         await mkdir(folder, { recursive: true });
