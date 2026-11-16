@@ -4,14 +4,14 @@
 
 ## In short
 
-- **Automated checks:** all 128 tests pass (`python check.py`).
+- **Automated checks:** all 130 tests pass (`python check.py`).
 - **Installed build:** the portable build in `dist` ran end to end on this PC. It used its own Node.js, opened the Wii Menu in its own window and started Bowling. It stopped the game cleanly, and closing the window shut everything down.
-- **Not yet checked:** playing with real controllers. The real Dolphin has started Mario Kart Wii and Super Smash Bros. Brawl from their discs on this PC, but nothing has been played with a physical phone or a DualSense. [Still to check](#still-to-check-on-real-hardware) lists exactly what to try.
+- **Not yet checked:** playing with real controllers. The real Dolphin has started Mario Kart Wii, Super Smash Bros. Brawl and the 2-in-1 Wii Sports + Wii Sports Resort disc on this PC, but nothing has been played with a physical phone or a DualSense. [Still to check](#still-to-check-on-real-hardware) lists exactly what to try.
 
 ## How it was tested
 
 - **A stand-in Dolphin** (`tests/fixtures/StubDolphin.cs`, built by `tests/fixtures/make-test-console.ps1`). It records the command line it was given and writes a Dolphin-style log into the user folder it was handed. It closes like Dolphin when asked, and with `LRS_STUB_CRASH=1` it crashes with Windows' access-violation code two seconds in.
-- **Small disc images** carrying only real headers (game ID, Wii magic word, internal name) for Wii Sports, Wii Sports Resort, Mario Kart Wii and Super Smash Bros. Brawl.
+- **Small disc images** carrying only real headers (game ID, Wii magic word, internal name) for Wii Sports, Wii Sports Resort, the 2-in-1 disc of both, Mario Kart Wii and Super Smash Bros. Brawl.
 - **A throwaway settings folder**, so this PC's real `%LOCALAPPDATA%\LivingRoomSports` and any real Dolphin folder were never touched.
 - **The in-app browser**, at 1280×720 (16:9), 1024×768 (4:3) and phone size (375×812), for the Wii Menu and the phone pages.
 - **The real launcher**, `dist\Living Room Sports\Living Room Sports.exe`, driving a real Edge window.
@@ -34,6 +34,7 @@
 | Returning restores the previous selection | Launched, closed, reopened | Works |
 | Control profiles: mouse and stick navigation, test screen, remapping, dead zones, reconnects | Mouse and keyboard in the browser; tests of the gamepad code | Works with mouse and keyboard. No DualSense was connected |
 | Per-activity Wii Remote, Nunchuk and MotionPlus requirements | Catalogue tests; selector entries | Works |
+| Resort started from the 2-in-1 disc's own menu | The real disc (SP2P01) started in the real Dolphin with the plan for a Wii Sports Tennis launch: four Wii Remotes with MotionPlus and nothing plugged into it, nothing in Dolphin's log, and the disc's *Which game would you like to play?* menu on screen. Tests of the plan and of a launch from the disc | Works, after a fix (below). Resort's sports not yet reached with the new setup |
 | Missing files, disconnects, launch failures and crashes | Tests for each; the stand-in crashing on demand | Works: each reports what happened and what to do |
 | Emulator settings and saves preserved | Tests that write and then restore Dolphin's settings, including after an interrupted run | Works on the stand-in's user folder |
 | Phone controls, including gyro motion | The real phone page run in a fake browser (18 tests) and its motion maths (6 tests); layouts viewed at phone size | Works in tests. No physical phone was used |
@@ -74,6 +75,7 @@ The phone setup page, which opens on Android steps for an Android phone, and the
 - **A destructive dialog started on its confirm button.** It now starts on Cancel.
 - **A game ending mid-transition could leave Now playing stuck on screen.** Screen changes are now made one at a time.
 - **A game could be left small and frameless.** A move that landed while Dolphin was switching to full screen put the window back to the size it was being moved at, so the game sat in a small box with no title bar. The console now stops setting the window's place once Dolphin changes its style, and makes a frameless window that does not fill its screen fill it.
+- **Resort said a Wii Remote had no MotionPlus.** The 2-in-1 disc opens on a menu that starts either game, whichever channel launched it. A Wii Sports launch gave each Wii Remote a Nunchuk and no MotionPlus, so Resort's Table Tennis turned them away. With that disc, every Wii Remote now has MotionPlus, which Wii Sports ignores, and a Nunchuk only for a sport that uses one.
 
 ## Still to check on real hardware
 
@@ -82,5 +84,5 @@ The phone setup page, which opens on Android steps for an Android phone, and the
 3. **A DualSense over USB and Bluetooth.** Check Wii Menu navigation, the Controllers › Test tab, the gyro pointer in a sport, and that it reconnects after being turned off and on.
 4. **From the shortcut.** Start a game and check that Dolphin comes to the front and that the Wii Menu comes back after you quit the game.
 5. **Two screens with a disc.** Set **Wii Options › Dolphin › Game screen** to the second screen, start Wii Sports and check that it fills that screen and looks sharp rather than soft. Press **Move to the other screen**. On a phone, point at the game and tap **Recenter**: the pointer should be in the middle of the game. Then press Home in the game and choose Wii Menu: the Wii Menu should come back.
-6. **Wii Sports Resort.** Start Golf and check that no message about the extension appears; start Archery and check that the Nunchuk works.
+6. **Wii Sports Resort.** Start Golf and check that no message about the extension appears; start Archery and check that the Nunchuk works. With the 2-in-1 disc, also start Tennis, choose Wii Sports Resort on the disc's menu and start Table Tennis: no message about MotionPlus should appear.
 7. **Super Smash Bros. Brawl.** Start a Brawl with a DualSense and a phone. Check that the DualSense plays as a GameCube controller (✕ attacks, △ jumps) and that the phone's stick moves its fighter and C jumps.

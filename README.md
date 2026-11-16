@@ -110,6 +110,8 @@ Some sports need a Nunchuk (Boxing, Archery, Power Cruising and Cycling). All of
 
 Wii Sports ignores a Nunchuk it does not need, so its Wii Remotes always have one. Wii Sports Resort does not: in any sport without a Nunchuk it stops and asks for the extension to be unplugged from the MotionPlus. So in Resort the Nunchuk is attached only when you start Archery, Power Cruising or Cycling. To change to a sport that needs it, or away from one, quit the game and choose the sport from the selector.
 
+The 2-in-1 *Wii Sports + Wii Sports Resort* disc opens on its own menu, where you can choose either game whichever sport you started. So with that disc every Wii Remote has MotionPlus, which Wii Sports ignores, and the Nunchuk follows Resort's rule: it is attached only when you start Boxing, Archery, Power Cruising or Cycling.
+
 **Wii Options › Controllers** has four tabs:
 
 - **Players**: who plays with what.
