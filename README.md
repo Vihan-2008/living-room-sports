@@ -197,3 +197,7 @@ JARVIS runs `python check.py`, which runs the same Node tests. They cover:
 - the arcade's rules and pairing.
 
 [docs/verification.md](docs/verification.md) records what was checked by hand and what still needs a real phone, a DualSense and real discs.
+
+## License
+
+MIT. See [LICENSE](LICENSE). The portable build also carries Node.js, which has its own MIT license; the build puts its notice in `runtime\Node.js LICENSE.txt`.
