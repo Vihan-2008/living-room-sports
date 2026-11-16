@@ -58,6 +58,27 @@ test('HTTP serves only public assets, join configuration and correct MIME types'
   for (const path of ['/server.js', '/package.json', '/.env', '/%2e%2e/check.py']) assert.equal((await fetch(app.base + path)).status, 404);
   const config = await (await fetch(app.base + '/config')).json(); assert.equal(config.code, app.code); assert.match(config.local, /\/remote\?code=\d{6}/);
 });
+test('another device on the network has to bring the room code from the TV, and cannot find it by guessing', async t => {
+  const app = await fixture(t);
+  // From here on every connection looks like a phone on the Wi-Fi.
+  app.server.prependListener('connection', socket => Object.defineProperty(socket, 'remoteAddress', { value: '192.168.1.40' }));
+  const config = await (await fetch(app.base + '/config')).text();
+  assert.ok(!config.includes(app.code), 'the room code is not handed out');
+  assert.equal(JSON.parse(config).joining, true);
+  const stranger = await client(app.ws);
+  stranger.send({ type: 'host' }); assert.equal((await stranger.get('error')).message, 'The arcade only runs on this PC.');
+  stranger.send({ type: 'menu' }); assert.equal((await stranger.get('error')).message, 'The console menu only runs on this PC.');
+  for (let i = 0; i < 5; i++) {
+    stranger.send({ type: 'join', code: String(100000 + i) === app.code ? '999999' : String(100000 + i) });
+    assert.equal((await stranger.get('error')).message, 'Room code does not match.');
+  }
+  stranger.send({ type: 'join', code: app.code });
+  assert.match((await stranger.get('error')).message, /^Too many wrong room codes/, 'even the right code waits once the guesses run out');
+  const another = await client(app.ws);
+  another.send({ type: 'join', code: app.code });
+  assert.match((await another.get('error')).message, /^Too many wrong room codes/, 'a fresh connection from the same address waits too');
+  stranger.ws.close(); another.ws.close();
+});
 test('four phones pair, fifth is refused, inputs sanitized, rumble returned and freed slot reused', async t => {
   const app = await fixture(t), host = await client(app.ws); host.send({ type: 'host' });
   assert.equal((await host.get('roster')).players.filter(p => p.connected).length, 0);

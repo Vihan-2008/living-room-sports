@@ -25,12 +25,18 @@ export function controllerLink(hostname, securePort, code, clientId) {
   return url.href;
 }
 
+// The room code this page was opened with. The controller passes it along; the PC never hands it out.
+export function roomCodeOf(location) {
+  const code = new URLSearchParams(location.search || '').get('code');
+  return /^\d{6}$/.test(code || '') ? code : null;
+}
+
 // Whether this phone trusts the PC yet: the secure address only answers once the certificate is trusted.
 // Resolves to { state: 'trusted', link } or { state: 'untrusted' | 'off' | 'offline' }.
 export async function checkTrust({ fetch, location, clientId = null, timeout = CHECK_TIMEOUT_MS }) {
   let config;
   try { config = await (await fetch('/config')).json(); } catch { return { state: 'offline' }; }
-  const code = /^\d{6}$/.test(config?.code) ? config.code : null;
+  const code = roomCodeOf(location);
   if (location.protocol === 'https:') return { state: 'trusted', link: code ? `/remote?code=${code}` : '/remote' };
   if (!config?.securePort) return { state: 'off' };
   const abort = new AbortController(), timer = setTimeout(() => abort.abort(), timeout);
@@ -96,8 +102,7 @@ function startPage() {
   document.addEventListener('visibilitychange', () => { if (!document.hidden && $('trust').dataset.state !== 'trusted') check(); });
   window.addEventListener('pageshow', event => { if (event.persisted) check(); });
 
-  fetch('/config').then(response => response.json()).then(config => {
-    if (/^\d{6}$/.test(config?.code)) $('buttons-only').href = `/remote?code=${config.code}`;
-  }, () => {});
+  const code = roomCodeOf(location);
+  if (code) $('buttons-only').href = `/remote?code=${code}`;
   check();
 }

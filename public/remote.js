@@ -83,6 +83,8 @@ function connect() {
 function onJoined(msg) {
   joined = true; slot = msg.slot; playsGames = msg.inGames !== false;
   store.set('lrs-name', $('name').value.trim());
+  // The setup page links back here, and only this page knows the code: the PC never hands it out.
+  $('motion-setup').href = `/phone-setup?code=${encodeURIComponent($('code').value)}`;
   $('join-screen').hidden = true; $('remote-controls').hidden = false;
   document.documentElement.style.setProperty('--player', msg.color);
   $('slot-label').textContent = `P${slot}`;

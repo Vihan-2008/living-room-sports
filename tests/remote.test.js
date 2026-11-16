@@ -310,6 +310,7 @@ test('over plain HTTP, or with no sensors, the phone says so truthfully and link
   const http = await remote({ secure: false }), socket = http.join();
   assert.equal(http.$('sensor-status').textContent, 'Motion is off until this phone trusts the PC.');
   assert.equal(http.$('motion-setup').hidden, false);
+  assert.equal(http.$('motion-setup').href, '/phone-setup?code=123456', 'the setup page gets the room code from here, as the PC never hands it out');
   assert.ok(socket.sent.some(m => m.type === 'status' && m.motion === 'insecure'));
   http.pointer('a', 'down'); assert.equal(inputs(socket).at(-1).button, 'a');
   const bare = await remote({ motionType: null, orientationType: null }); bare.join();

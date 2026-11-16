@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { readFile } from 'node:fs/promises';
 import { createApp } from '../server.js';
-import { platformOf, iosBrowser, controllerLink, checkTrust, trustText } from '../public/phone-setup.js';
+import { platformOf, iosBrowser, controllerLink, checkTrust, trustText, roomCodeOf } from '../public/phone-setup.js';
 
 const IPHONE_SAFARI = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1';
 const IPHONE_CHROME = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/131.0.6778.73 Mobile/15E148 Safari/604.1';
@@ -26,8 +26,9 @@ test('the secure controller link keeps the room code and the phone\'s identity',
 });
 
 test('the trust check answers from what the phone can actually reach', async () => {
-  const http = { protocol: 'http:', hostname: '192.168.1.40' };
-  const config = (body = { code: '123456', securePort: 3443 }) => async url => (url === '/config' ? { json: async () => body } : { ok: true });
+  // The room code comes from the page's own address, as the controller passes it; the PC's /config never has it.
+  const http = { protocol: 'http:', hostname: '192.168.1.40', search: '?code=123456' };
+  const config = (body = { securePort: 3443 }) => async url => (url === '/config' ? { json: async () => body } : { ok: true });
   assert.deepEqual(await checkTrust({ location: http, clientId: 'phone-abc', fetch: config() }),
     { state: 'trusted', link: 'https://192.168.1.40:3443/remote?code=123456&id=phone-abc' });
   assert.deepEqual(await checkTrust({ location: http, fetch: async url => (url === '/config' ? { json: async () => ({ code: '123456', securePort: 3443 }) } : Promise.reject(new TypeError('certificate'))) }),
@@ -38,8 +39,11 @@ test('the trust check answers from what the phone can actually reach', async () 
   { state: 'untrusted' }, 'a request that never answers gives up');
   assert.deepEqual(await checkTrust({ location: http, fetch: config({ code: '123456', securePort: null }) }), { state: 'off' });
   assert.deepEqual(await checkTrust({ location: http, fetch: async () => { throw new TypeError('offline'); } }), { state: 'offline' });
-  assert.deepEqual(await checkTrust({ location: { protocol: 'https:', hostname: '192.168.1.40' }, fetch: config() }),
+  assert.deepEqual(await checkTrust({ location: { ...http, protocol: 'https:' }, fetch: config() }),
     { state: 'trusted', link: '/remote?code=123456' }, 'a page that loaded securely is already trusted');
+  assert.deepEqual(await checkTrust({ location: { ...http, search: '' }, clientId: 'phone-abc', fetch: config({ code: '123456', securePort: 3443 }) }),
+    { state: 'trusted', link: 'https://192.168.1.40:3443/remote?id=phone-abc' }, 'a code from anywhere but the page\'s own address is ignored');
+  assert.equal(roomCodeOf({ search: '?code=12345x' }), null);
   for (const state of ['checking', 'trusted', 'untrusted', 'off', 'offline']) assert.ok(trustText(state));
   assert.equal(trustText('trusted', 'iPad'), 'This iPad trusts the PC. Motion controls are ready.', 'the answer names the device');
 });
