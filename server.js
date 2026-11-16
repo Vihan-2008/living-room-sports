@@ -19,6 +19,8 @@ const assets = new Map(readdirSync(rootDir).filter(name => /^[a-z0-9][a-z0-9.-]*
 
 export const colors = ['#149ed4', '#ef665e', '#61b968', '#e1ab23'];
 const RESERVE_MS = 60000;
+// Wrong room codes allowed from one address each minute, so the six digits cannot be found by trying them all.
+const CODE_TRIES_PER_MINUTE = 5;
 
 // preferred: addresses of adapters that have a default gateway, i.e. the ones on the home network.
 // routedOnly drops the other adapters once a routed one is known: a phone can never reach a
@@ -75,6 +77,12 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
   const playerTypes = () => consoleApi?.settings.get()?.controls.players || ['phone', 'phone', 'phone', 'phone'];
   const joiningOpen = () => consoleApi?.settings.get()?.phones.joining !== false;
   const toInputClients = value => { send(host, value); for (const m of menus()) send(m, value); };
+  const wrongCodes = new Map();
+  const recentWrongCodes = address => {
+    const recent = (wrongCodes.get(address) || []).filter(t => Date.now() - t < 60000);
+    if (recent.length) wrongCodes.set(address, recent); else wrongCodes.delete(address);
+    return recent;
+  };
 
   function chooseSlot(clientId) {
     const now = Date.now();
@@ -130,8 +138,11 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
     if (url.pathname === '/config') {
       await onConfig().catch(() => {});
       const port = req.socket.localPort, secure = securePort();
-      const interfaces = networkInterfaces();
       res.setHeader('Content-Type', 'application/json');
+      // The room code is for the TV to show. A phone brings it from there, in the QR code's link or typed in, so
+      // another device on the network is never handed it here.
+      if (!isLoopback(req.socket.remoteAddress)) return res.end(JSON.stringify({ joining: joiningOpen(), securePort: secure }));
+      const interfaces = networkInterfaces();
       const preferred = preferredAddresses();
       return res.end(JSON.stringify({ code, joining: joiningOpen(), addresses: phoneAddresses(interfaces, port, code, 'http', preferred),
         secure: secure ? phoneAddresses(interfaces, secure, code, 'https', preferred) : [], securePort: secure, local: `http://localhost:${port}/remote?code=${code}` }));
@@ -184,7 +195,12 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
       try { msg = JSON.parse(data); } catch { return; }
       if (!msg || typeof msg !== 'object') return;
       if (msg.type === 'join' && !client.role) {
-        if (msg.code !== code) return send(client, { type: 'error', message: 'Room code does not match.' });
+        const address = socket.remoteAddress || '';
+        if (recentWrongCodes(address).length >= CODE_TRIES_PER_MINUTE) return send(client, { type: 'error', message: 'Too many wrong room codes. Wait a minute, then enter the code shown on the TV.' });
+        if (msg.code !== code) {
+          wrongCodes.set(address, [...recentWrongCodes(address), Date.now()]);
+          return send(client, { type: 'error', message: 'Room code does not match.' });
+        }
         const clientId = typeof msg.clientId === 'string' && /^[\w-]{8,64}$/.test(msg.clientId) ? msg.clientId : null;
         const choice = chooseSlot(clientId);
         if (choice.error) return send(client, { type: 'error', message: choice.error });
@@ -197,6 +213,8 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
         send(client, { type: 'activity', ...activity });
         broadcast();
       } else if (msg.type === 'host' && !client.role) {
+        // The arcade sees every phone's input, so like the console menu it only runs on this PC.
+        if (!client.local) return send(client, { type: 'error', message: 'The arcade only runs on this PC.' });
         if (host) return send(client, { type: 'error', message: 'A dashboard is already open. Close it and retry.' });
         client.role = 'host'; host = client; broadcast();
       } else if (msg.type === 'menu' && !client.role) {

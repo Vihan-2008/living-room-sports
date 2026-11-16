@@ -139,6 +139,8 @@ The controller follows the screen. Upright, the remote stands up. In landscape i
 
 The PC creates the certificate itself. It is limited to private network addresses, so it cannot be used to pose as a website on the internet. Buttons work without it. If Windows asks whether Node.js may use the network, allow **private networks**.
 
+Only phones with the room code can play. The code is in the QR code and under it on the TV, and the PC never hands it to another device that asks. A device that enters five wrong codes in a minute waits a minute before it can try again. The Wii Menu, its settings and the arcade open only on the PC's own screen. A phone that has joined can work them with its pointer, but no other device can open them.
+
 ## Settings and saves
 
 - **This app's settings**, the phone certificate and the launcher's log live in `%LOCALAPPDATA%\LivingRoomSports`. Deleting that folder resets the console; it does not touch Dolphin or your saves.
@@ -156,6 +158,7 @@ The PC creates the certificate itself. It is limited to private network addresse
 | *Dolphin closed right after starting* | The message includes the end of Dolphin's log. Usually the disc image is damaged or Dolphin is too old; update Dolphin from dolphin-emu.org. |
 | A phone shows *Reconnecting…* | Check it is on the same Wi-Fi as the PC. It rejoins by itself with the same player number. |
 | A phone has no motion | Open **Turn on motion** on the phone and follow it to the end. On iPhone, tap **Allow motion**. |
+| A phone says *Too many wrong room codes* | Wait a minute, then scan the QR code on the TV, or type the code under it. |
 | The window does not open | The launcher shows a message. Details are in `%LOCALAPPDATA%\LivingRoomSports\launcher.log`. |
 
 ## The arcade
