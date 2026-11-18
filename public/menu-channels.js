@@ -175,8 +175,14 @@ function playingView(ctx) {
   const info = h('div', { class: 'playing-info' });
   const close = button('Close the game', () => confirmClose(), { sound: 'select' });
   const move = button('Move to the other screen', () => ctx.attempt(() => ctx.api('/api/screen', { to: 'next' })), { sound: 'select' });
+  // Another player can join mid-game: from here when the game is on another screen, or from a phone's ⋯ menu.
+  const joinCode = h('img', { class: 'qr', alt: 'Code to scan with a phone' }), joinText = h('p', { class: 'small muted' });
+  const join = h('div', { class: 'playing-join' }, joinCode, h('div', {}, h('h3', {}, 'Join with a phone'), joinText));
+  const side = h('div', { class: 'playing-side' }, h('div', { class: 'playing-banner' }, canvas), join);
   const el = frame({ title: 'Now playing', className: 'playing-screen', onBack: () => confirmClose(), backLabel: 'Close the game',
-    body: h('div', { class: 'playing-layout' }, h('div', { class: 'playing-banner' }, canvas), info), actions: [move] });
+    body: h('div', { class: 'playing-layout' }, side, info), actions: [move] });
+  let config = null;
+  fetch('/config').then(response => response.json()).then(value => { config = value; render(ctx.state); }).catch(() => {});
   el.querySelector('.frame-foot .back').remove();
   el.querySelector('.frame-foot').prepend(close);
   let raf = 0;
@@ -207,6 +213,15 @@ function playingView(ctx) {
       roles?.length ? h('h3', {}, 'Controllers') : null,
       roles?.length ? h('ul', { class: 'roles' }, roles.filter(r => r.kind !== 'off').map(r => h('li', {}, h('span', { class: 'role-player', style: { background: PLAYER_COLORS[r.slot - 1] } }, `P${r.slot}`), h('span', {}, `${PLAYER_KIND_NAMES[r.kind]}: ${r.as}`)))) : null);
     close.disabled = !!stopping;
+    const address = config?.addresses?.[0];
+    const joinable = !!address && state.settings.phones.joining && !stopping && ctx.roster.filter(p => p.connected).length < 4;
+    join.hidden = !joinable;
+    side.classList.toggle('with-join', joinable);
+    if (joinable) {
+      const src = `/qr?url=${encodeURIComponent(address)}`;
+      if (joinCode.getAttribute('src') !== src) joinCode.setAttribute('src', src);
+      joinText.textContent = `Scan the code, or open ${address.replace(/^https?:\/\//, '').replace(/\?code=.*/, '')} and enter room code ${config.code}. A phone already playing shows the code in its ⋯ menu.`;
+    }
     const screens = state.screens?.length || 0;
     move.hidden = screens < 2 || !!stopping;
     move.querySelector('.wbtn-label').textContent = screens > 2 ? 'Move to the next screen' : 'Move to the other screen';

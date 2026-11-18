@@ -125,9 +125,13 @@ The console writes these layouts into Dolphin for each game and puts Dolphin's o
 
 ## Phones
 
-Phones and iPads need the same Wi-Fi as the PC; guest networks that keep devices apart will not work. Open **Connect controllers** (the controller button in the bottom-right corner) and scan the code with each one's camera. Up to four join. Each takes the next free player number, and a phone that drops out gets its number back when it returns.
+Phones and iPads need the same Wi-Fi as the PC; guest networks that keep devices apart will not work. Open **Connect controllers** (the controller button in the bottom-right corner) and scan the code with each one's camera. Up to four join. Each phone then shows **Choose your player**, listing only the players that are free, and the list changes as other phones join and leave. A player set to another controller in **Wii Options › Controllers › Players** is marked *Wii Menu only*: a phone there works the menus, and in games that player uses its own controller. A phone that drops out keeps its player for a minute. It comes back as the same player by itself, and until then no other phone is offered that player.
 
-The phone shows a Wii Remote: pointer, D-pad, A, B, −, Home, +, 1 and 2. In a sport that needs a Nunchuk, and in Brawl, it adds C, Z and a stick. In Mario Kart Wii it turns into a wheel. The **⋯** button shows the menu path for the running game, recentres the pointer, moves the game to the PC's other screen, quits the game (tap twice), or leaves.
+Phones can also join while a game runs. Now playing shows the code beside the game's picture until four phones are connected, and a phone that is already playing shows it under **⋯ › Add a player**. Dolphin has a Wii Remote ready for every player set to Phone, so a phone that joins mid-game works it straight away; most games then add the player at their own player screen.
+
+The phone shows a Wii Remote: pointer, D-pad, A, B, −, Home, +, 1 and 2. In a sport that needs a Nunchuk, and in Brawl, it adds C, Z and a stick. In Mario Kart Wii it turns into a wheel. The **⋯** button shows the menu path for the running game, recentres the pointer, shows the code for another player, moves the game to the PC's other screen, quits the game (tap twice), or leaves. Tapping a button quickly twice never zooms the page.
+
+Each phone sends what it is doing many times a second, and the PC answers every update. A phone never has more than two updates on their way: when the Wi-Fi is busy it waits for an answer and then sends only its newest state, so a slow moment never leaves a queue of old movements to play back. This holds with four phones at once.
 
 The controller follows the screen. Upright, the remote stands up. In landscape it lies across the screen with the D-pad under your left thumb and A and B under your right, and the Nunchuk sits to its left. Either way, **the top edge of the screen is the end you point at the TV**. The wheel is always wide, so on an upright screen it is drawn across and you turn the phone to hold it. The layout only changes once the phone has been still for a moment, so a swing that tips the screen does not rearrange the buttons mid-game. On an iPad everything is drawn larger, and the iPad follows the same motion steps as an iPhone.
 
@@ -159,7 +163,9 @@ Only phones with the room code can play. The code is in the QR code and under it
 | *Dolphin is already open* | Close Dolphin, then press Start again. **Close an open Dolphin** in Wii Options › Dolphin does it for you. |
 | *Dolphin closed right after starting* | The message includes the end of Dolphin's log. Usually the disc image is damaged or Dolphin is too old; update Dolphin from dolphin-emu.org. |
 | The QR code's link does not open on a phone | Open **Connect controllers** on the PC. If Windows Firewall is the cause, it says so: press **Open firewall settings**, then **Change settings**, tick the network kind it names next to Node.js, and press **Check again**. Otherwise check the phone is on the same Wi-Fi, not a guest network. |
-| A phone shows *Reconnecting…* | Check it is on the same Wi-Fi as the PC. It rejoins by itself with the same player number. |
+| A phone shows *Reconnecting…* | Check it is on the same Wi-Fi as the PC. Within a minute it rejoins by itself as the same player. |
+| A phone's controls lag | A phone only ever sends its newest movement, so lag that stays comes from the Wi-Fi itself. Move nearer the router, or join the phone to the router's 5 GHz network if it has one. |
+| *Every player is taken* on a phone | Four phones are playing, or a dropped phone's player is being kept for it. The list fills in as soon as a player is free. |
 | A phone has no motion | Open **Turn on motion** on the phone and follow it to the end. On iPhone, tap **Allow motion**. |
 | A phone says *Too many wrong room codes* | Wait a minute, then scan the QR code on the TV, or type the code under it. |
 | The window does not open | The launcher shows a message. Details are in `%LOCALAPPDATA%\LivingRoomSports\launcher.log`. |
@@ -197,7 +203,8 @@ JARVIS runs `python check.py`, which runs the same Node tests. They cover:
 - how each kind of exit is reported, and Home › Wii Menu in a game closing it;
 - which screen a game opens on, and moving it between screens of different sizes and scaling;
 - the channel catalogue and the phone's game guide;
-- the phone controller page, run in a fake browser: motion maths, iPhone calibration, layouts, following the screen into landscape, iPad sizing, multi-touch and reconnecting;
+- the phone controller page, run in a fake browser: motion maths, iPhone calibration, layouts, following the screen into landscape, iPad sizing, multi-touch, no zooming, choosing a player, adding a player mid-game, how fast it sends and reconnecting;
+- the server's player list: free players only, a dropped phone's player kept for it alone, joining closed, and an answer to every phone update;
 - the phone setup page and certificate download;
 - the launcher: options, start-up, `--focus`, closing the Wii Menu during a game, and the portable build running with its own Node.js;
 - the arcade's rules and pairing.

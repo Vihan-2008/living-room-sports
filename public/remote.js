@@ -6,6 +6,8 @@ import { createCalibration, remoteMotion, heldMotion, pointerFrom, orientationSp
 
 const $ = id => document.getElementById(id);
 const PAD_MS = { game: 16, menu: 50 };   // full controller state: 60 a second in a game, 20 on the menu
+const PAD_WINDOW = 2;                    // updates on their way before the console has answered one
+const PAD_IDLE_MS = 250;                 // an unchanged controller is repeated this often, not 60 times a second
 const POINTER_MS = 33;                   // menu pointer updates
 const SETTLE_MS = 600, MOVING_SPEED = 100; // the screen is followed once the device turns slower than 100°/s for 0.6 s
 const DEVICE = deviceKind(navigator.userAgent, navigator.maxTouchPoints); // phone, iPad or tablet
@@ -22,6 +24,8 @@ const DIRECTIONS = new Set(['up', 'down', 'left', 'right']);
 
 let socket = null, joined = false, desired = false, reconnectTimer = null, padTimer = null, sensorTimer = null, quitTimer = null;
 let slot = null, playsGames = true, activity = { mode: 'menu' }, layout = 'remote', motion = null, listening = false, permissionPending = false;
+// The player this phone was, to take again after a dropped connection.
+let rejoinSlot = null;
 // The screen a running game moved to, until this device is pointed at it and recentred.
 let aimAt = null;
 let base = null, lastOrientation = null, lastOrientationAt = 0, lastRate = 0, pointer = { x: 0, y: 0 };
@@ -61,11 +65,13 @@ function sendMenu(value) { if (activity.mode !== 'game') send({ type: 'input', x
 function connect() {
   clearTimeout(reconnectTimer);
   socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws`);
-  socket.onopen = () => socket.send(JSON.stringify({ type: 'join', name: $('name').value.trim(), code: $('code').value, clientId: myId }));
+  socket.onopen = () => socket.send(JSON.stringify({ type: 'lobby', code: $('code').value, clientId: myId }));
   socket.onmessage = event => {
     let msg;
     try { msg = JSON.parse(event.data); } catch { return; }
-    if (msg.type === 'joined') onJoined(msg);
+    if (msg.type === 'ack') padAnswered();
+    else if (msg.type === 'places') showPlaces(msg);
+    else if (msg.type === 'joined') onJoined(msg);
     else if (msg.type === 'activity') applyActivity(msg);
     else if (msg.type === 'rumble') navigator.vibrate?.(msg.duration);
     else if (msg.type === 'kicked') { desired = false; showJoin(`The console removed this ${DEVICE}. Join again to play.`); }
@@ -80,12 +86,45 @@ function connect() {
   socket.onerror = () => setStatus(`Cannot reach the console. Check that this ${DEVICE} is on the same Wi-Fi as the PC.`);
 }
 
+// ---- Choosing a player ----------------------------------------------------------------------------
+// The console lists the players nobody has, and sends the list again whenever it changes. The player this phone
+// had before is on it for this phone alone, so after a dropped connection the phone simply takes it back.
+function showPlaces({ places = [], joining = true, message = null }) {
+  if (rejoinSlot) {
+    if (places.some(place => place.slot === rejoinSlot)) return choose(rejoinSlot);
+    if (joining) message = `Player ${rejoinSlot} was taken while this ${DEVICE} was away. Choose a player.`;
+    rejoinSlot = null;
+  }
+  $('join-screen').hidden = false; $('remote-controls').hidden = true;
+  $('join-form').hidden = true; $('places-card').hidden = false;
+  $('places-note').textContent = places.length ? 'Only free players are shown.'
+    : joining ? 'Every player is taken. One appears here as soon as someone leaves.' : 'Joining is closed. Open it from Connect controllers on the TV.';
+  $('places').replaceChildren(...places.map(placeButton));
+  setStatus(message || '');
+}
+function placeButton(place) {
+  const part = (tag, className, text) => { const el = document.createElement(tag); el.className = className; el.textContent = text; return el; };
+  const button = part('button', place.yours ? 'place yours' : 'place', '');
+  button.type = 'button';
+  button.style.setProperty('--place', place.color);
+  const note = place.yours ? 'Kept for you' : place.inGames ? '' : 'Wii Menu only';
+  button.append(part('span', 'place-badge', `P${place.slot}`), part('span', 'place-name', `Player ${place.slot}`), ...(note ? [part('small', '', note)] : []));
+  // iOS grants motion only from a tap, and this is the tap that starts play.
+  button.onclick = () => { enableMotion(true); choose(place.slot); };
+  return button;
+}
+function choose(wanted) {
+  if (socket?.readyState !== WebSocket.OPEN) return;
+  setStatus('Joining…');
+  socket.send(JSON.stringify({ type: 'join', name: $('name').value.trim(), code: $('code').value, clientId: myId, slot: wanted }));
+}
+
 function onJoined(msg) {
-  joined = true; slot = msg.slot; playsGames = msg.inGames !== false;
+  joined = true; slot = msg.slot; rejoinSlot = msg.slot; playsGames = msg.inGames !== false;
   store.set('lrs-name', $('name').value.trim());
   // The setup page links back here, and only this page knows the code: the PC never hands it out.
   $('motion-setup').href = `/phone-setup?code=${encodeURIComponent($('code').value)}`;
-  $('join-screen').hidden = true; $('remote-controls').hidden = false;
+  $('join-screen').hidden = true; $('remote-controls').hidden = false; $('places-card').hidden = true;
   document.documentElement.style.setProperty('--player', msg.color);
   $('slot-label').textContent = `P${slot}`;
   document.querySelectorAll('.led').forEach((led, i) => led.classList.toggle('on', i === slot - 1));
@@ -99,10 +138,10 @@ function onJoined(msg) {
 }
 
 function showJoin(message) {
-  joined = false;
+  joined = false; rejoinSlot = null;
   stopPad();
   releaseAll();
-  $('join-screen').hidden = false; $('remote-controls').hidden = true; $('join-form').hidden = false;
+  $('join-screen').hidden = false; $('remote-controls').hidden = true; $('join-form').hidden = false; $('places-card').hidden = true;
   setStatus(message);
 }
 const setStatus = text => { $('remote-status').textContent = text; };
@@ -181,15 +220,33 @@ window.addEventListener('orientationchange', fit);
 globalThis.screen?.orientation?.addEventListener?.('change', fit);
 
 // ---- Controller state ---------------------------------------------------------------------------
+// Rounded far finer than a Wii Remote reads, which keeps each update small on a busy Wi-Fi.
+const rounded = (values, scale) => values.map(v => Math.round(v * scale) / scale);
 function padState() {
-  return { type: 'pad', b: [...held], s: stick, p: layout === 'wheel' ? [0, 0] : [pointer.x, -pointer.y], a: latest.a, g: latest.g };
+  return { type: 'pad', b: [...held], s: rounded(stick, 100), p: rounded(layout === 'wheel' ? [0, 0] : [pointer.x, -pointer.y], 1000),
+    a: rounded(latest.a, 1000), g: rounded(latest.g, 100) };
 }
-function sendPad() { if (!suspended) send(padState()); }
+// Each update is the whole controller, so only the newest one matters. The console answers every update; with
+// PAD_WINDOW unanswered the phone waits, then sends whatever is newest when an answer comes. So a slow moment on
+// the Wi-Fi never leaves a queue of old states for the game to work through, however many phones share it.
+let padsUnanswered = 0, padWaiting = false, lastPad = '', lastPadAt = -Infinity;
+function sendPad() {
+  if (suspended || !isOpen()) return;
+  if (padsUnanswered >= PAD_WINDOW) { padWaiting = true; return; }
+  const text = JSON.stringify(padState()), now = performance.now();
+  if (text === lastPad && now - lastPadAt < PAD_IDLE_MS) return;
+  padsUnanswered++; padWaiting = false; lastPad = text; lastPadAt = now;
+  socket.send(text);
+}
+function padAnswered() {
+  padsUnanswered = Math.max(0, padsUnanswered - 1);
+  if (padWaiting) sendPad();
+}
 function startPad() {
   clearInterval(padTimer);
   padTimer = joined ? setInterval(sendPad, activity.mode === 'game' ? PAD_MS.game : PAD_MS.menu) : null;
 }
-function stopPad() { clearInterval(padTimer); padTimer = null; }
+function stopPad() { clearInterval(padTimer); padTimer = null; padsUnanswered = 0; padWaiting = false; lastPad = ''; }
 function reportStatus() { if (motion) send({ type: 'status', motion: motion === 'permission' ? 'waiting' : motion, layout }); }
 
 function recenter() {
@@ -272,7 +329,28 @@ if (stickEl) {
 
 // ---- Sheet: recenter, the in-game path, moving the game, quit, leave ----------------------------
 function openSheet() { $('sheet').hidden = false; $('more-button').setAttribute?.('aria-expanded', 'true'); }
-function closeSheet() { $('sheet').hidden = true; $('more-button').setAttribute?.('aria-expanded', 'false'); resetQuit(); }
+function closeSheet() {
+  $('sheet').hidden = true; $('more-button').setAttribute?.('aria-expanded', 'false'); resetQuit();
+  $('invite').hidden = true; $('add-player').hidden = false;
+}
+
+// Adding a player: this phone shows the code for the next one, during a game as on the Wii Menu. The code
+// leads to the PC's plain address, which every phone can open; one that trusts the PC moves to the secure one.
+const bold = text => { const b = document.createElement('b'); b.textContent = text; return b; };
+$('add-player').onclick = async () => {
+  $('add-player').hidden = true; $('invite').hidden = false;
+  $('invite').scrollIntoView?.({ block: 'nearest' });
+  const picture = $('invite-code'), note = $('invite-note'), room = $('code').value;
+  picture.hidden = true; note.textContent = 'Getting the code…';
+  let config = null;
+  try { config = await (await fetch('/config')).json(); } catch {}
+  if ($('invite').hidden) return; // the sheet was closed meanwhile
+  if (config?.joining === false) { note.textContent = 'Joining is closed. Open it from Connect controllers on the TV.'; return; }
+  const origin = config?.httpPort ? `http://${location.hostname}:${config.httpPort}` : location.origin;
+  picture.src = `/qr?url=${encodeURIComponent(`${origin}/remote?code=${room}`)}`;
+  picture.hidden = false;
+  note.replaceChildren(`Scan this with the new player's camera, on the same Wi-Fi. Or open ${origin.replace(/^https?:\/\//, '')} and enter room code `, bold(room), '.');
+};
 $('more-button').onclick = () => ($('sheet').hidden ? openSheet() : closeSheet());
 $('sheet-close').onclick = closeSheet;
 function resetQuit() { clearTimeout(quitTimer); $('quit-game').textContent = 'Quit the game'; $('quit-game').classList.remove('confirm'); }
@@ -288,6 +366,18 @@ $('quit-game').onclick = () => {
   send({ type: 'quit' });
   closeSheet();
 };
+
+// ---- No zooming: two quick taps or two thumbs are play, never a zoom ------------------------------
+// The viewport and touch-action already forbid zooming. iOS Safari ignores the viewport's rule, so on the controller
+// a quick second tap and a pinch are refused here as well. The keys go by pointer events, which this leaves alone.
+const DOUBLE_TAP_MS = 350;
+let lastTouchEnd = -Infinity;
+document.addEventListener('touchend', event => {
+  const now = performance.now();
+  if (now - lastTouchEnd < DOUBLE_TAP_MS && event.target?.closest?.('.controller')) event.preventDefault();
+  lastTouchEnd = now;
+}, { passive: false });
+for (const gesture of ['gesturestart', 'gesturechange', 'dblclick']) document.addEventListener(gesture, event => event.preventDefault(), { passive: false });
 
 // ---- Pausing: a hidden page or a lost focus lets go of every button ------------------------------
 window.addEventListener('blur', () => { suspended = true; releaseAll(); });

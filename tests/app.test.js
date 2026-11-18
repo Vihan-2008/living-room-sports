@@ -7,8 +7,8 @@ import net from 'node:net';
 import { createApp, lanAddresses, phoneAddresses } from '../server.js';
 import { sports, evaluate, nextTurn, timingAt } from '../public/games.js';
 
-async function fixture(t) {
-  const app = createApp(); app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
+async function fixture(t, options = {}) {
+  const app = createApp(options); app.server.listen(0, '127.0.0.1'); await once(app.server, 'listening');
   t.after(() => app.close());
   return { ...app, base: `http://127.0.0.1:${app.server.address().port}`, ws: `ws://127.0.0.1:${app.server.address().port}/ws` };
 }
@@ -65,6 +65,7 @@ test('another device on the network has to bring the room code from the TV, and 
   const config = await (await fetch(app.base + '/config')).text();
   assert.ok(!config.includes(app.code), 'the room code is not handed out');
   assert.equal(JSON.parse(config).joining, true);
+  assert.equal(JSON.parse(config).httpPort, app.server.address().port, 'a phone can invite another to the plain address');
   const stranger = await client(app.ws);
   stranger.send({ type: 'host' }); assert.equal((await stranger.get('error')).message, 'The arcade only runs on this PC.');
   stranger.send({ type: 'menu' }); assert.equal((await stranger.get('error')).message, 'The console menu only runs on this PC.');
@@ -95,6 +96,90 @@ test('four phones pair, fifth is refused, inputs sanitized, rumble returned and 
   phones[0].ws.close(); const roster = await host.get('roster'); assert.equal(roster.players[0].connected, false);
   fifth.send({ type: 'join', code: app.code, name: '<script>long player name must be bounded</script>' });
   assert.equal((await fifth.get('joined')).slot, 1); const updated = await host.get('roster'); assert.equal(updated.players[0].name.length, 20);
+});
+const slotsOf = msg => msg.places.map(p => p.slot);
+async function untilRoster(host, check) { for (;;) { const roster = await host.get('roster'); if (check(roster.players)) return roster; } }
+
+test('phones choose from the free players, and a dropped phone\'s player is free to that phone alone', async t => {
+  const app = await fixture(t), host = await client(app.ws);
+  host.send({ type: 'host' }); await host.get('roster');
+  const lobby = async id => { const phone = await client(app.ws); phone.send({ type: 'lobby', code: app.code, clientId: id }); return phone; };
+  const first = await lobby('phone-first-1');
+  assert.deepEqual(slotsOf(await first.get('places')), [1, 2, 3, 4]);
+  first.send({ type: 'join', code: app.code, clientId: 'phone-first-1', slot: 3, name: 'Ana' });
+  assert.equal((await first.get('joined')).slot, 3);
+
+  const second = await lobby('phone-second-2');
+  assert.deepEqual(slotsOf(await second.get('places')), [1, 2, 4], 'a player someone has is not offered');
+  const third = await lobby('phone-third-3'); await third.get('places');
+  third.send({ type: 'join', code: app.code, clientId: 'phone-third-3', slot: 1 });
+  assert.equal((await third.get('joined')).slot, 1);
+  assert.deepEqual(slotsOf(await second.get('places')), [2, 4], 'and the list follows the room');
+
+  first.ws.close();
+  await untilRoster(host, players => players[2].waiting);
+  const back = await lobby('phone-first-1');
+  assert.deepEqual((await back.get('places')).places.map(p => [p.slot, p.yours]), [[2, false], [3, true], [4, false]],
+    'its player is kept for it, and offered to it alone');
+  second.send({ type: 'join', code: app.code, clientId: 'phone-second-2', slot: 3 });
+  const refused = await second.get('places');
+  assert.equal(refused.message, 'Player 3 was just taken. Choose another player.', 'a phone that asks for it anyway is told to choose again');
+  assert.deepEqual(slotsOf(refused), [2, 4]);
+  back.send({ type: 'join', code: app.code, clientId: 'phone-first-1', slot: 3 });
+  assert.deepEqual(await back.get('joined'), { type: 'joined', slot: 3, color: '#61b968', returning: true, inGames: true });
+
+  const stranger = await client(app.ws);
+  stranger.send({ type: 'lobby', code: '000000' });
+  assert.equal((await stranger.get('error')).message, 'Room code does not match.', 'the list of players needs the room code');
+  for (const phone of [back, second, third, stranger]) phone.ws.close();
+});
+
+test('a phone that chooses a different player gives up the one it had', async t => {
+  const app = await fixture(t), host = await client(app.ws);
+  host.send({ type: 'host' }); await host.get('roster');
+  const old = await client(app.ws);
+  old.send({ type: 'join', code: app.code, clientId: 'phone-same-1', slot: 2 }); await old.get('joined');
+  const fresh = await client(app.ws);
+  fresh.send({ type: 'lobby', code: app.code, clientId: 'phone-same-1' });
+  assert.deepEqual((await fresh.get('places')).places.map(p => [p.slot, p.yours]), [[1, false], [2, true], [3, false], [4, false]]);
+  fresh.send({ type: 'join', code: app.code, clientId: 'phone-same-1', slot: 4 });
+  assert.equal((await fresh.get('joined')).slot, 4);
+  const cancel = await host.get('input');
+  assert.deepEqual([cancel.slot, cancel.cancel], [2, true], 'whatever the old connection held is let go');
+  const roster = await untilRoster(host, players => players[3].connected);
+  assert.deepEqual(roster.players.map(p => [p.connected, p.waiting]), [[false, false], [false, false], [false, false], [true, false]], 'one phone, one player');
+  fresh.ws.close();
+});
+
+test('with joining closed a phone is offered only its own player, and hears when joining opens', async t => {
+  const settings = { controls: { players: ['phone', 'dualsense', 'phone', 'phone'] }, phones: { joining: true } };
+  let changed = () => {};
+  const app = await fixture(t, { console: { onChange: fn => { changed = fn; }, settings: { get: () => settings }, state: async () => ({}), phonePad() {}, phoneLeft() {}, notify() {} } });
+  const host = await client(app.ws); host.send({ type: 'host' }); await host.get('roster');
+  const first = await client(app.ws);
+  first.send({ type: 'join', code: app.code, clientId: 'phone-first-1' });
+  assert.equal((await first.get('joined')).slot, 1);
+  first.ws.close();
+  await untilRoster(host, players => players[0].waiting);
+  settings.phones.joining = false; changed({});
+  const back = await client(app.ws), other = await client(app.ws);
+  back.send({ type: 'lobby', code: app.code, clientId: 'phone-first-1' });
+  other.send({ type: 'lobby', code: app.code, clientId: 'phone-other-2' });
+  assert.deepEqual(await back.get('places'), { type: 'places', joining: false, places: [{ slot: 1, color: '#149ed4', inGames: true, yours: true }] });
+  assert.deepEqual(await other.get('places'), { type: 'places', joining: false, places: [] });
+  settings.phones.joining = true; changed({});
+  const opened = await other.get('places');
+  assert.deepEqual(opened.places.map(p => [p.slot, p.inGames]), [[2, false], [3, true], [4, true]], 'player 2 is the DualSense in games, so a phone there works the Wii Menu only');
+  other.send({ type: 'join', code: app.code, clientId: 'phone-other-2' });
+  assert.equal((await other.get('joined')).slot, 3, 'a phone that names no player gets one set to Phone');
+  back.ws.close(); other.ws.close();
+});
+
+test('every controller update from a phone is answered at once, even past the rate cap', async t => {
+  const app = await fixture(t), phone = await client(app.ws);
+  phone.send({ type: 'join', code: app.code }); await phone.get('joined');
+  for (let i = 0; i < 260; i++) phone.send({ type: 'pad', b: [], s: [0, 0], p: [0, 0], a: [0, 0, 1], g: [0, 0, 0] });
+  for (let i = 0; i < 260; i++) assert.equal((await phone.get('ack')).type, 'ack');
 });
 test('wrong room code and duplicate host are rejected without consuming a slot', async t => {
   const app = await fixture(t), phone = await client(app.ws), host = await client(app.ws), secondHost = await client(app.ws);

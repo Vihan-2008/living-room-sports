@@ -57,6 +57,8 @@ export function frame(value, opcode = 1) {
 const isLoopback = address => /^(127\.|::1$|::ffff:127\.)/.test(address || '');
 const bounded = (v, lo, hi) => (Number.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : 0);
 const BUTTONS = ['up', 'down', 'left', 'right', 'a', 'b', 'minus', 'plus', 'home', 'one', 'two', 'c', 'z'];
+// The reply to every controller update from a phone.
+const PAD_ACK = frame({ type: 'ack' });
 
 // options.console: the console back end (console/index.js), or null for the plain arcade server.
 // options.securePort(): the HTTPS port when phones can use motion over HTTPS.
@@ -73,7 +75,11 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
   const menus = () => [...clients].filter(c => c.role === 'menu');
   const roster = () => slots.map((p, i) => ({ slot: i + 1, color: colors[i], name: p?.name || '', connected: !!p,
     motion: p?.motion || null, layout: p?.layout || null, waiting: !p && !!reservations[i] && reservations[i].until > Date.now() }));
-  const broadcast = () => { for (const c of clients) send(c, { type: 'roster', players: roster() }); };
+  // The roster is for the TV and the arcade; phones never see who else is playing.
+  const broadcast = () => {
+    for (const c of clients) if (c === host || c.role === 'menu') send(c, { type: 'roster', players: roster() });
+    refreshLobby();
+  };
   const playerTypes = () => consoleApi?.settings.get()?.controls.players || ['phone', 'phone', 'phone', 'phone'];
   const joiningOpen = () => consoleApi?.settings.get()?.phones.joining !== false;
   const toInputClients = value => { send(host, value); for (const m of menus()) send(m, value); };
@@ -83,23 +89,58 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
     if (recent.length) wrongCodes.set(address, recent); else wrongCodes.delete(address);
     return recent;
   };
+  // A room code from a phone. Wrong ones count against the address it connects from.
+  function codeError(address, given) {
+    if (recentWrongCodes(address).length >= CODE_TRIES_PER_MINUTE) return 'Too many wrong room codes. Wait a minute, then enter the code shown on the TV.';
+    if (given !== code) { wrongCodes.set(address, [...recentWrongCodes(address), Date.now()]); return 'Room code does not match.'; }
+    return null;
+  }
+  const clientIdOf = value => (typeof value === 'string' && /^[\w-]{8,64}$/.test(value) ? value : null);
 
-  function chooseSlot(clientId) {
-    const now = Date.now();
-    if (clientId) {
-      const held = reservations.findIndex(r => r?.clientId === clientId && r.until > now);
-      if (held >= 0 && !slots[held]) return { index: held, returning: true };
-      const live = slots.findIndex(s => s?.clientId === clientId);
-      if (live >= 0) { const old = slots[live]; old.replaced = true; old.socket.destroy(); slots[live] = null; return { index: live, returning: true }; }
+  // The players a phone may be: those nobody has. A player kept for a phone that dropped is free to that phone
+  // alone, and while joining is closed a phone is offered only its own.
+  function vacancies(clientId) {
+    const now = Date.now(), types = playerTypes(), open = joiningOpen();
+    return [0, 1, 2, 3].flatMap(i => {
+      const live = slots[i], kept = reservations[i]?.until > now ? reservations[i] : null;
+      const yours = !!clientId && (live?.clientId === clientId || kept?.clientId === clientId);
+      if (!yours && (live || kept || !open)) return [];
+      return [{ slot: i + 1, color: colors[i], inGames: types[i] === 'phone', yours }];
+    });
+  }
+  // A phone that has the room code but has not chosen a player yet hears whenever its choice changes.
+  const lobbyView = client => ({ places: vacancies(client.clientId), joining: joiningOpen() });
+  function sendPlaces(client, message = null) {
+    const view = lobbyView(client);
+    client.placesSent = JSON.stringify(view);
+    send(client, { type: 'places', ...view, ...(message ? { message } : {}) });
+  }
+  function refreshLobby() {
+    for (const c of clients) if (c.role === 'lobby' && JSON.stringify(lobbyView(c)) !== c.placesSent) sendPlaces(c);
+  }
+
+  // wanted: the player the phone chose. Without one (an older page), its own player comes first, then one set to
+  // Phone, then any other free one.
+  function chooseSlot(clientId, wanted = null) {
+    const places = vacancies(clientId);
+    const place = wanted ? places.find(p => p.slot === wanted) : places.find(p => p.yours) || places.find(p => p.inGames) || places[0];
+    if (!place) {
+      if (!joiningOpen()) return { error: 'Joining is closed. Open it from Connect controllers on the TV.' };
+      if (wanted) return { error: `Player ${wanted} was just taken. Choose another player.` };
+      if (slots.every(Boolean)) return { error: 'Room full: four players are already connected.' };
+      return { error: 'The free players are being kept for phones that dropped. One opens up within a minute.' };
     }
-    if (!joiningOpen()) return { error: 'Joining is closed. Open it from Connect Controllers on the TV.' };
-    const types = playerTypes();
-    const free = [0, 1, 2, 3].filter(i => !slots[i]);
-    const open = i => !reservations[i] || reservations[i].until <= now;
-    // Phones take the player positions set to "Phone" first, and slots nobody is returning to.
-    const order = [...free].sort((a, b) => (types[a] === 'phone' ? 0 : 1) - (types[b] === 'phone' ? 0 : 1) || (open(a) ? 0 : 1) - (open(b) ? 0 : 1) || a - b);
-    if (!order.length) return { error: 'Room full: four players are already connected.' };
-    return { index: order[0], returning: false };
+    // A phone is one player: an older connection of its own, and any player kept for it, are let go.
+    if (clientId) {
+      slots.forEach((s, i) => {
+        if (s?.clientId !== clientId) return;
+        s.replaced = true; s.socket.destroy(); slots[i] = null;
+        toInputClients({ type: 'input', slot: i + 1, cancel: true });
+        consoleApi?.phoneLeft(i + 1);
+      });
+      reservations.forEach((r, i) => { if (r?.clientId === clientId) reservations[i] = null; });
+    }
+    return { index: place.slot - 1, returning: place.yours };
   }
 
   function activityFor(state) {
@@ -116,6 +157,7 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
       for (const c of clients) if (c.role === 'remote') send(c, { type: 'activity', ...activity });
     }
     for (const m of menus()) send(m, { type: 'console', state });
+    refreshLobby(); // joining opened or closed, or a player's controller changed
   });
 
   async function handler(req, res) {
@@ -141,7 +183,8 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
       res.setHeader('Content-Type', 'application/json');
       // The room code is for the TV to show. A phone brings it from there, in the QR code's link or typed in, so
       // another device on the network is never handed it here.
-      if (!isLoopback(req.socket.remoteAddress)) return res.end(JSON.stringify({ joining: joiningOpen(), securePort: secure }));
+      // httpPort: the plain address's port, which a phone needs to invite another from the secure page.
+      if (!isLoopback(req.socket.remoteAddress)) return res.end(JSON.stringify({ joining: joiningOpen(), securePort: secure, httpPort: server.address()?.port ?? null }));
       const interfaces = networkInterfaces();
       const preferred = preferredAddresses();
       return res.end(JSON.stringify({ code, joining: joiningOpen(), addresses: phoneAddresses(interfaces, port, code, 'http', preferred),
@@ -194,16 +237,24 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
       let msg;
       try { msg = JSON.parse(data); } catch { return; }
       if (!msg || typeof msg !== 'object') return;
-      if (msg.type === 'join' && !client.role) {
-        const address = socket.remoteAddress || '';
-        if (recentWrongCodes(address).length >= CODE_TRIES_PER_MINUTE) return send(client, { type: 'error', message: 'Too many wrong room codes. Wait a minute, then enter the code shown on the TV.' });
-        if (msg.code !== code) {
-          wrongCodes.set(address, [...recentWrongCodes(address), Date.now()]);
-          return send(client, { type: 'error', message: 'Room code does not match.' });
+      if (msg.type === 'lobby' && !client.role) {
+        // A phone with the room code sees which players it can be before it joins.
+        const problem = codeError(socket.remoteAddress || '', msg.code);
+        if (problem) return send(client, { type: 'error', message: problem });
+        client.role = 'lobby'; client.clientId = clientIdOf(msg.clientId);
+        sendPlaces(client);
+      } else if (msg.type === 'join' && (!client.role || client.role === 'lobby')) {
+        const problem = codeError(socket.remoteAddress || '', msg.code);
+        if (problem) return send(client, { type: 'error', message: problem });
+        const clientId = clientIdOf(msg.clientId);
+        const wanted = Number.isInteger(msg.slot) && msg.slot >= 1 && msg.slot <= 4 ? msg.slot : null;
+        const choice = chooseSlot(clientId, wanted);
+        if (choice.error && !wanted) return send(client, { type: 'error', message: choice.error });
+        if (choice.error) {
+          // Someone took that player a moment before: this phone stays to choose another.
+          client.role = 'lobby'; client.clientId = clientId;
+          return sendPlaces(client, choice.error);
         }
-        const clientId = typeof msg.clientId === 'string' && /^[\w-]{8,64}$/.test(msg.clientId) ? msg.clientId : null;
-        const choice = chooseSlot(clientId);
-        if (choice.error) return send(client, { type: 'error', message: choice.error });
         const index = choice.index;
         client.role = 'remote'; client.slot = index + 1; client.clientId = clientId;
         client.name = String(msg.name || `Player ${index + 1}`).trim().slice(0, 20) || `Player ${index + 1}`;
@@ -237,7 +288,11 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
           pressed: msg.pressed === true, cancel: msg.cancel === true, swing: bounded(msg.swing, 0, 1), shake: msg.shake === true, pointing: msg.pointing === true,
           x: bounded(msg.x, -1, 1), y: bounded(msg.y, -1, 1) });
       } else if (msg.type === 'pad' && client.role === 'remote') {
-        // Full controller state for Dolphin, at most 250 updates a second per phone.
+        // Full controller state for Dolphin, at most 250 updates a second per phone. Each update is answered at
+        // once. The phone sends its newest state as replies come in, so a slow moment on the Wi-Fi never queues
+        // old ones. And the reply takes the network's acknowledgement straight back: Windows otherwise holds it
+        // for up to 200 ms, and some phones (Safari) send nothing more until it comes.
+        if (!socket.destroyed) socket.write(PAD_ACK);
         const now = Date.now();
         client.padTimes = client.padTimes.filter(t => now - t < 1000);
         if (client.padTimes.length >= 250) return;
@@ -265,9 +320,10 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
         consoleApi?.settings.save({ phones: { joining: msg.open === true } }).then(() => { consoleApi.notify(); broadcast(); });
       }
     };
+    // A burst of small messages after a Wi-Fi stall is normal; only a single oversized frame is refused, so all
+    // that is ever kept between reads is part of one frame.
     const consume = chunk => {
       buffer = Buffer.concat([buffer, chunk]);
-      if (buffer.length > 16384) return socket.destroy();
       while (buffer.length >= 2) {
         const opcode = buffer[0] & 15;
         if (!(buffer[0] & 128) || (buffer[0] & 112) || !(buffer[1] & 128)) return socket.destroy();
@@ -297,7 +353,11 @@ export function createApp({ console: consoleApi = null, securePort = () => null,
         consoleApi?.phoneLeft(client.slot);
         slots[client.slot - 1] = null;
         // A phone that drops (screen lock, Wi-Fi blip) gets its own slot back for a minute.
-        if (client.clientId && !client.kicked && !client.replaced) reservations[client.slot - 1] = { clientId: client.clientId, until: Date.now() + RESERVE_MS };
+        if (client.clientId && !client.kicked && !client.replaced) {
+          reservations[client.slot - 1] = { clientId: client.clientId, until: Date.now() + RESERVE_MS };
+          // When the minute is up, the TV stops saying so and the player is free to everyone.
+          setTimeout(broadcast, RESERVE_MS + 50).unref?.();
+        }
       }
       broadcast();
     });
