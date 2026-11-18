@@ -353,8 +353,9 @@ async function main() {
   const dir = dataDir();
   const certs = createCertificateStore(join(dir, 'certs'));
   let secure = null, app = null, preferred = await gatewayAddresses(), preferredAt = Date.now();
-  const consoleApi = createConsole({ dataDir: dir, getPhones: () => app?.roster() || [], focusApp: pid => focusLauncher(port, pid) });
+  const consoleApi = createConsole({ dataDir: dir, ports: [port, securePort], getPhones: () => app?.roster() || [], focusApp: pid => focusLauncher(port, pid) });
   const refreshCertificate = async () => {
+    consoleApi.refreshFirewall();
     if (Date.now() - preferredAt > 30000) { preferred = await gatewayAddresses(); preferredAt = Date.now(); }
     if (!secure) return;
     const tls = await certs.ensure(lanAddresses(networkInterfaces(), preferred));

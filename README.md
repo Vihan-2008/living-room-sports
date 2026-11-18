@@ -137,7 +137,9 @@ The controller follows the screen. Upright, the remote stands up. In landscape i
 2. That page has steps for iPhone or iPad, and for Android. It downloads the PC's certificate and walks through installing and trusting it, then checks that it worked.
 3. After that, scanning the code goes straight to the secure controller with motion on. iPhones and iPads still ask for permission once with a tap, because Safari requires one.
 
-The PC creates the certificate itself. It is limited to private network addresses, so it cannot be used to pose as a website on the internet. Buttons work without it. If Windows asks whether Node.js may use the network, allow **private networks**.
+The PC creates the certificate itself. It is limited to private network addresses, so it cannot be used to pose as a website on the internet. Buttons work without it.
+
+Windows Firewall decides whether phones can reach the PC at all, and it decides separately for Private and Public networks. If Windows asks whether Node.js may use the network, allow the kind your Wi-Fi is set to. When the firewall turns phones away, **Connect controllers** says so and names the box to tick, and **Open firewall settings** opens Windows' list of allowed apps.
 
 Only phones with the room code can play. The code is in the QR code and under it on the TV, and the PC never hands it to another device that asks. A device that enters five wrong codes in a minute waits a minute before it can try again. The Wii Menu, its settings and the arcade open only on the PC's own screen. A phone that has joined can work them with its pointer, but no other device can open them.
 
@@ -156,6 +158,7 @@ Only phones with the room code can play. The code is in the QR code and under it
 | *The game file is missing* | Reconnect the drive that holds it, or choose the file again. |
 | *Dolphin is already open* | Close Dolphin, then press Start again. **Close an open Dolphin** in Wii Options › Dolphin does it for you. |
 | *Dolphin closed right after starting* | The message includes the end of Dolphin's log. Usually the disc image is damaged or Dolphin is too old; update Dolphin from dolphin-emu.org. |
+| The QR code's link does not open on a phone | Open **Connect controllers** on the PC. If Windows Firewall is the cause, it says so: press **Open firewall settings**, then **Change settings**, tick the network kind it names next to Node.js, and press **Check again**. Otherwise check the phone is on the same Wi-Fi, not a guest network. |
 | A phone shows *Reconnecting…* | Check it is on the same Wi-Fi as the PC. It rejoins by itself with the same player number. |
 | A phone has no motion | Open **Turn on motion** on the phone and follow it to the end. On iPhone, tap **Allow motion**. |
 | A phone says *Too many wrong room codes* | Wait a minute, then scan the QR code on the TV, or type the code under it. |
