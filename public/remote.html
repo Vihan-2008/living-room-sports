@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#e3e7ea">
 <title>Living Room Sports controller</title>
 <link rel="icon" href="/icon.svg" type="image/svg+xml">
@@ -18,6 +18,12 @@
     <label>Room code<input id="code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required autocomplete="off"></label>
     <button class="join-button">Join</button>
   </form>
+  <!-- After the room code: the players this phone can be. The console lists only free ones and updates the list. -->
+  <section id="places-card" class="join-card" hidden>
+    <h1>Choose your player</h1>
+    <p id="places-note" class="lede">Only free players are shown.</p>
+    <div id="places" class="places" role="group" aria-label="Free players"></div>
+  </section>
   <p id="remote-status" class="join-status" role="status">Connect this <span data-device>phone</span> to the same Wi-Fi as the PC.</p>
 </main>
 
@@ -108,6 +114,13 @@
           <ol id="game-steps" class="steps"></ol>
         </section>
         <button id="recenter" class="sheet-action" type="button">Recenter the pointer</button>
+        <button id="add-player" class="sheet-action" type="button">Add a player</button>
+        <!-- The next player joins from here, so nobody has to leave the game for the code on the TV. -->
+        <section id="invite" class="invite" hidden>
+          <h2>Add a player</h2>
+          <img id="invite-code" class="invite-code" alt="Code for the new player's phone to scan" hidden>
+          <p id="invite-note" class="sheet-note"></p>
+        </section>
         <button id="move-game" class="sheet-action" type="button" hidden>Move the game to the other screen</button>
         <button id="quit-game" class="sheet-action danger" type="button" hidden>Quit the game</button>
         <p id="quit-note" class="sheet-note" hidden>You can also press Home in the game and choose Wii Menu.</p>

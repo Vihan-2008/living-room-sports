@@ -308,6 +308,13 @@ input[type="text"]:focus, input[type="text"].is-hot { border-color: var(--wii); 
 /* ---- Now playing ----------------------------------------------------------------------------- */
 .playing-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
 .playing-banner { border: 3px solid var(--rim); border-radius: 22px; overflow: hidden; align-self: start; aspect-ratio: 16 / 10; background: #fff; }
+/* With the join code under it, the banner gives up height and keeps its shape. */
+.playing-side { display: grid; gap: 18px; align-content: start; min-height: 0; }
+.playing-side.with-join { grid-template-rows: minmax(0, 1fr) auto; align-content: stretch; }
+.playing-side.with-join .playing-banner { height: 100%; max-width: 100%; box-sizing: border-box; justify-self: start; }
+.playing-join { display: grid; grid-template-columns: auto 1fr; gap: 20px; align-items: center; }
+.playing-join h3 { margin: 0 0 4px; }
+.playing-join .qr, .stage[data-aspect="4:3"] .playing-join .qr { width: 168px; height: 168px; }
 .playing-art { width: 100%; height: 100%; display: block; }
 .playing-info { display: grid; gap: 8px; align-content: start; overflow: auto; }
 .playing-info h2 { font: 600 34px/1.1 var(--font); }

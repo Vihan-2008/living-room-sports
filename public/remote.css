@@ -16,6 +16,9 @@
   :root { --page: #14181b; --page-ink: #dde3e7; --muted: #939ea5; --edge: #39434a; color-scheme: dark; }
 }
 html, body { margin: 0; height: 100%; background: var(--page); color: var(--page-ink); }
+/* A quick second tap is play, never a zoom: nothing on the page zooms on a double tap or waits to see if one is
+   coming. The controller goes further and takes no browser gestures at all (below). */
+* { touch-action: manipulation; }
 body { overflow: hidden; -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%; }
 button { font: inherit; color: inherit; cursor: pointer; }
 [hidden] { display: none !important; }
@@ -35,6 +38,20 @@ button { font: inherit; color: inherit; cursor: pointer; }
   background: linear-gradient(#55ccf3, var(--wii-deep)); box-shadow: inset 0 1px 0 rgba(255, 255, 255, .45), 0 2px 0 rgba(0, 0, 0, .08); }
 .join-button:active { filter: brightness(.94); }
 .join-status { margin: 0; max-width: 330px; text-align: center; color: var(--muted); font-size: 15px; line-height: 1.4; }
+.join-status:empty { display: none; }
+
+/* Choosing a player: each free one is a key carrying its player light, in the order of the Wii Remote's LEDs. */
+.places { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; }
+.place { display: grid; justify-items: center; align-content: start; gap: 8px; padding: 16px 10px 14px; border: 0; border-radius: 18px;
+  background: var(--key); color: #3d464c; font-size: 16px; font-weight: 600;
+  box-shadow: 0 0 0 1px var(--key-edge), 0 2px 0 rgba(0, 0, 0, .06); }
+.place:active { background: var(--key-shade); }
+.place:focus-visible { outline: 3px solid var(--wii); outline-offset: 2px; }
+.place:disabled { opacity: .55; }
+.place.yours { box-shadow: 0 0 0 2px var(--place), 0 2px 0 rgba(0, 0, 0, .06); }
+.place-badge { display: grid; place-items: center; min-width: 54px; height: 36px; padding: 0 12px; box-sizing: border-box; border-radius: 999px;
+  background: var(--place); color: #fff; font-size: 18px; font-weight: 700; }
+.place small { margin: 0; font-size: 13px; font-weight: 500; color: #6c777e; }
 
 /* ---- The controller frame ------------------------------------------------------------------------ */
 /* remote.js sizes the frame to the page. It turns the frame only to draw the wheel across an upright screen,
@@ -233,6 +250,11 @@ small { display: block; margin-top: 3px; font-size: calc(12px * var(--scale)); f
 .sheet-action.danger.confirm { color: #fff; background: var(--danger); box-shadow: none; }
 .sheet-action.quiet { color: var(--wii-deep); background: transparent; box-shadow: none; }
 .sheet-note { margin: -2px 6px 4px; font-size: 13px; line-height: 1.4; color: #55606a; text-align: center; }
+.invite { display: grid; justify-items: center; gap: 10px; padding: 14px 8px 6px; border-radius: 16px; box-shadow: 0 0 0 1px var(--key-edge); }
+.invite h2 { margin: 0; }
+.invite-code { width: min(220px, 60vw); aspect-ratio: 1; image-rendering: pixelated; }
+.invite .sheet-note { margin: 0 4px 4px; }
+.invite b { color: #3d464c; font-variant-numeric: tabular-nums; letter-spacing: .06em; }
 
 @media (prefers-reduced-motion: reduce) {
   .knob, .dial-face { transition: none; }

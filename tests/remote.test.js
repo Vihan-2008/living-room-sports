@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import * as motion from '../public/phone-motion.js';
 
 const html = await readFile(new URL('../public/remote.html', import.meta.url), 'utf8');
+const css = await readFile(new URL('../public/remote.css', import.meta.url), 'utf8');
 const source = (await readFile(new URL('../public/remote.js', import.meta.url), 'utf8')).replace(/^import .*$/m, '');
 const close = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-6, `${message}: ${actual} is not ${expected}`);
 const IPAD = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15';
@@ -130,7 +131,7 @@ async function remote({ search = '?code=123456', secure = true, motionType = {},
       classList: { add: name => classes.add(name), remove: name => classes.delete(name), contains: name => classes.has(name),
         toggle: (name, force) => ((force ?? !classes.has(name)) ? classes.add(name) : classes.delete(name)) },
       addEventListener() {}, setPointerCapture() {}, setAttribute() {},
-      replaceChildren(...children) { this.children = children; },
+      replaceChildren(...children) { this.children = children; }, append(...children) { this.children.push(...children); },
       getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }) };
   }
   for (const [, id] of html.matchAll(/id="([^"]+)"/g)) elements.set(id, element(id));
@@ -150,8 +151,12 @@ async function remote({ search = '?code=123456', secure = true, motionType = {},
     URLSearchParams, AbortController, Promise, fetch, navigator: { vibrate() {}, userAgent, maxTouchPoints }, performance: { now: () => now },
     WebSocket: class {
       static OPEN = 1; static CONNECTING = 0;
-      constructor(url) { this.url = url; this.readyState = 0; this.sent = []; this.events = []; sockets.push(this); }
-      send(data) { assert.equal(this.readyState, 1); const value = JSON.parse(data); this.sent.push(value); this.events.push(value); }
+      // The console answers each controller update at once, unless a test holds the answers back.
+      constructor(url) { this.url = url; this.readyState = 0; this.sent = []; this.events = []; this.answer = true; sockets.push(this); }
+      send(data) {
+        assert.equal(this.readyState, 1); const value = JSON.parse(data); this.sent.push(value); this.events.push(value);
+        if (value.type === 'pad' && this.answer) this.onmessage({ data: '{"type":"ack"}' });
+      }
       close() { this.events.push('close'); this.readyState = 3; }
     },
     setTimeout: fn => { timers.set(++timerId, fn); return timerId; }, clearTimeout: id => timers.delete(id),
@@ -159,9 +164,16 @@ async function remote({ search = '?code=123456', secure = true, motionType = {},
   });
   vm.runInContext(source, context);
   const $ = id => elements.get(id);
+  // The console's list of free players, and the phone's buttons for them.
+  const places = (socket, list, more = {}) => socket.onmessage({ data: JSON.stringify({ type: 'places', joining: true, places: list, ...more }) });
+  const place = (slot, more = {}) => ({ slot, color: ['#149ed4', '#ef665e', '#61b968', '#e1ab23'][slot - 1], inGames: true, yours: false, ...more });
+  const placeButtons = () => $('places').children.map(b => ({ button: b, label: b.children.map(c => c.textContent).join(' '), className: b.className }));
+  // Joins the way a player does: room code, then a tap on a free player, then the console's welcome.
   function join(slot = 1, extra = {}) {
     if (sockets.at(-1)?.readyState !== 0) $('join-form').onsubmit({ preventDefault() {} });
     const socket = sockets.at(-1); socket.readyState = 1; socket.onopen();
+    places(socket, [1, 2, 3, 4].map(n => place(n)));
+    placeButtons().find(b => b.label.startsWith(`P${slot} `)).button.onclick();
     socket.onmessage({ data: JSON.stringify({ type: 'joined', slot, color: '#149ed4', ...extra }) });
     socket.onmessage({ data: JSON.stringify({ type: 'activity', mode: 'menu' }) });
     return socket;
@@ -171,7 +183,7 @@ async function remote({ search = '?code=123456', secure = true, motionType = {},
     const handler = type === 'lostpointercapture' ? 'onlostpointercapture' : `onpointer${type}`;
     buttons.filter(b => b.dataset.button === name)[index][handler]({ pointerId, preventDefault() {} });
   }
-  return { elements, $, handlers, sockets, timers, intervals, replaced, storage, document, buttons, deviceWords, join, activity, pointer,
+  return { elements, $, handlers, sockets, timers, intervals, replaced, storage, document, buttons, deviceWords, join, activity, pointer, places, place, placeButtons,
     settle: () => new Promise(resolve => setImmediate(resolve)), // lets the motion permission answer arrive
     tick: (ms = 1000) => { now += ms; },
     // The browser turns the page: a new screen angle and page size, then the screen's change event.
@@ -191,6 +203,53 @@ test('two fingers on one button make one press, released only when both lift', a
   app.pointer('b', 'up', 2); app.pointer('b', 'lostpointercapture', 2);
   assert.deepEqual(inputs(socket).filter(m => m.button === 'b').map(m => m.pressed), [true, false]);
   assert.deepEqual(pads(socket).at(-1).b, []);
+});
+
+test('two quick taps or a pinch on the controller never zoom the page', async () => {
+  assert.match(html, /<meta name="viewport" content="[^"]*maximum-scale=1, user-scalable=no/);
+  assert.match(css, /^\* \{ touch-action: manipulation; \}$/m, 'nothing on the page zooms on a double tap');
+  assert.match(css, /\.controller \{[^}]*touch-action: none;/, 'the controller takes no browser gestures at all');
+  const app = await remote(); app.join();
+  const onController = { closest: selector => (selector === '.controller' ? {} : null) };
+  const lift = (target = onController) => { let prevented = false; app.handlers.touchend({ target, preventDefault() { prevented = true; } }); return prevented; };
+  assert.equal(lift(), false, 'a single tap is left alone');
+  app.tick(200); assert.equal(lift(), true, 'a second tap 0.2 s later cannot zoom, as iOS ignores the viewport');
+  app.tick(1000); assert.equal(lift(), false);
+  app.tick(100); assert.equal(lift({ closest: () => null }), false, 'the join screen keeps its ordinary taps');
+  for (const gesture of ['gesturestart', 'gesturechange', 'dblclick']) {
+    let prevented = false; app.handlers[gesture]({ preventDefault() { prevented = true; } });
+    assert.ok(prevented, `${gesture} is refused`);
+  }
+});
+
+test('updates never queue behind a slow Wi-Fi: with two unanswered the phone waits, then sends the controller as it is', async () => {
+  const app = await remote(), socket = app.join(); await app.settle();
+  app.activity(socket, { mode: 'game', title: 'sports', sport: 'tennis', layout: 'remote', nunchuk: false, name: 'Tennis', path: [] });
+  socket.answer = false;
+  const before = pads(socket).length;
+  app.pointer('a', 'down'); app.pointer('a', 'up');
+  app.pointer('b', 'down'); app.tick(16); app.sendPad(); app.tick(16); app.sendPad();
+  assert.equal(pads(socket).length, before + 2, 'two updates on their way, so the rest wait');
+  socket.onmessage({ data: '{"type":"ack"}' });
+  assert.equal(pads(socket).length, before + 3, 'one answer lets one more go');
+  assert.deepEqual(pads(socket).at(-1).b, ['b'], 'and it is the newest state, not the next in a queue');
+  socket.onmessage({ data: '{"type":"ack"}' });
+  assert.equal(pads(socket).length, before + 3, 'nothing was waiting, so nothing more goes');
+});
+
+test('a controller left alone is sent four times a second, not sixty, and a change goes at once', async () => {
+  const app = await remote(), socket = app.join(); await app.settle();
+  app.activity(socket, { mode: 'game', title: 'sports', sport: 'tennis', layout: 'remote', nunchuk: false, name: 'Tennis', path: [] });
+  app.handlers.devicemotion({ accelerationIncludingGravity: { x: 0.1234567, y: -0.0098765, z: 9.80665 }, rotationRate: { alpha: 1.23456, beta: 0, gamma: 0 } });
+  app.sendPad();
+  const count = pads(socket).length;
+  assert.ok(pads(socket).at(-1).a.every(v => /^-?\d+(\.\d{1,3})?$/.test(String(v))), 'motion is rounded to a thousandth of g, still far finer than a Wii Remote');
+  for (let i = 0; i < 10; i++) { app.tick(16); app.sendPad(); }
+  assert.equal(pads(socket).length, count, 'nothing changed in 0.16 s, so nothing was sent');
+  app.tick(100); app.sendPad();
+  assert.equal(pads(socket).length, count + 1, 'repeated after a quarter of a second, so the console knows the phone is there');
+  app.pointer('a', 'down');
+  assert.equal(pads(socket).length, count + 2);
 });
 
 test('a cancelled touch lets go of everything without counting as a release', async () => {
@@ -244,19 +303,34 @@ test('a dropped connection comes back as the same phone', async () => {
   assert.match(app.$('remote-status').textContent, /Reconnecting/);
   [...app.timers.values()].at(-1)();
   const next = app.sockets.at(-1); next.readyState = 1; next.onopen();
-  assert.equal(next.sent[0].clientId, id, 'the server gives a returning phone its player number back');
-  next.onmessage({ data: JSON.stringify({ type: 'joined', slot: 2, color: '#ef665e', returning: true }) });
-  assert.equal(app.$('remote-status').textContent, 'Welcome back, player 2.');
+  assert.equal(next.sent[0].clientId, id, 'the console knows the phone again');
+  app.places(next, [app.place(1, { yours: true }), app.place(3)]);
+  assert.deepEqual(next.sent.at(-1), { type: 'join', name: '', code: '123456', clientId: id, slot: 1 }, 'its own player is taken back without asking');
+  next.onmessage({ data: JSON.stringify({ type: 'joined', slot: 1, color: '#149ed4', returning: true }) });
+  assert.equal(app.$('remote-status').textContent, 'Welcome back, player 1.');
+  assert.equal(app.$('remote-controls').hidden, false);
   app.pointer('right', 'up'); app.pointer('right', 'down'); app.pointer('right', 'up');
   assert.deepEqual(inputs(next).filter(m => m.button).map(m => m.pressed), [true, false]);
+
+  // Away longer than the console keeps a player, and someone else took it: the phone asks rather than guessing.
+  next.readyState = 3; next.onclose();
+  [...app.timers.values()].at(-1)();
+  const late = app.sockets.at(-1); late.readyState = 1; late.onopen();
+  app.places(late, [app.place(3)]);
+  assert.ok(!late.sent.some(m => m.type === 'join'));
+  assert.equal(app.$('join-screen').hidden, false); assert.equal(app.$('remote-controls').hidden, true);
+  assert.equal(app.$('remote-status').textContent, 'Player 1 was taken while this phone was away. Choose a player.');
+  assert.deepEqual(app.placeButtons().map(b => b.label), ['P3 Player 3']);
 });
 
-test('a scanned code joins at once, and the hand moves the way the phone turns', async () => {
+test('a scanned code needs no typing: straight to the players, and the hand moves the way the phone turns', async () => {
   const app = await remote();
   assert.equal(app.sockets.length, 1);
   assert.equal(app.$('join-form').hidden, true);
   const socket = app.join(); await app.settle();
-  assert.equal(socket.sent[0].code, '123456'); assert.equal(socket.sent[0].name, '');
+  assert.deepEqual([socket.sent[0].type, socket.sent[0].code], ['lobby', '123456']);
+  const join = socket.sent.find(m => m.type === 'join');
+  assert.deepEqual([join.code, join.name, join.slot], ['123456', '', 1]);
   assert.equal(app.$('enable-motion').hidden, true, 'no tap needed outside iOS');
   app.handlers.deviceorientation({ alpha: 90, beta: 20, gamma: 0 });
   app.tick();
@@ -278,20 +352,59 @@ test('a missing or malformed code keeps manual joining', async () => {
   }
 });
 
-test('iOS asks for motion only from the tap, and both permissions in that tap', async () => {
+test('iOS asks for motion only from a tap, both permissions in it: the tap on a player, or Turn on motion', async () => {
   const calls = [];
-  const app = await remote({ motionType: { requestPermission() { calls.push('motion'); return Promise.resolve('granted'); } },
-    orientationType: { requestPermission() { calls.push('orientation'); return Promise.resolve('granted'); } } });
-  const socket = app.join();
-  assert.deepEqual(calls, []);
-  assert.equal(app.$('enable-motion').hidden, false);
-  assert.equal(app.$('sensor-status').textContent, 'Motion needs your permission');
-  const pending = app.$('enable-motion').onclick();
-  assert.deepEqual(calls, ['motion', 'orientation'], 'both requested before anything is awaited');
-  await pending;
+  const asking = { motionType: { requestPermission() { calls.push('motion'); return Promise.resolve('granted'); } },
+    orientationType: { requestPermission() { calls.push('orientation'); return Promise.resolve('granted'); } } };
+  const app = await remote(asking);
+  const socket = app.sockets[0]; socket.readyState = 1; socket.onopen();
+  app.places(socket, [app.place(1), app.place(2)]);
+  assert.deepEqual(calls, [], 'nothing is asked before the player taps');
+  app.placeButtons()[1].button.onclick();
+  assert.deepEqual(calls, ['motion', 'orientation'], 'both requested in the tap, before anything is awaited');
+  socket.onmessage({ data: JSON.stringify({ type: 'joined', slot: 2, color: '#ef665e' }) });
+  await app.settle();
   app.sensors(); assert.ok(pads(socket).length || inputs(socket).some(m => m.pointing));
   await app.$('enable-motion').onclick();
   assert.equal(calls.length, 2, 'never asked twice');
+
+  // A phone back after a dropped connection takes its player without a tap, so it offers the button instead.
+  calls.length = 0;
+  const back = await remote(asking);
+  const again = back.sockets[0]; again.readyState = 1; again.onopen();
+  again.onmessage({ data: JSON.stringify({ type: 'joined', slot: 1, color: '#149ed4', returning: true }) });
+  assert.deepEqual(calls, []);
+  assert.equal(back.$('enable-motion').hidden, false);
+  assert.equal(back.$('sensor-status').textContent, 'Motion needs your permission');
+  const pending = back.$('enable-motion').onclick();
+  assert.deepEqual(calls, ['motion', 'orientation']);
+  await pending;
+});
+
+test('a phone chooses its player from the free ones, and the list follows the room', async () => {
+  const app = await remote(), socket = app.sockets[0]; socket.readyState = 1; socket.onopen();
+  app.places(socket, [app.place(2), app.place(3, { inGames: false }), app.place(4, { yours: true })]);
+  assert.equal(app.$('places-card').hidden, false); assert.equal(app.$('join-form').hidden, true);
+  assert.deepEqual(app.placeButtons().map(b => b.label), ['P2 Player 2', 'P3 Player 3 Wii Menu only', 'P4 Player 4 Kept for you']);
+  assert.equal(app.placeButtons()[2].className, 'place yours');
+  assert.equal(app.$('places-note').textContent, 'Only free players are shown.');
+  app.places(socket, [app.place(3, { inGames: false })]);
+  assert.deepEqual(app.placeButtons().map(b => b.label), ['P3 Player 3 Wii Menu only'], 'players taken meanwhile disappear');
+  app.places(socket, []);
+  assert.equal(app.$('places-note').textContent, 'Every player is taken. One appears here as soon as someone leaves.');
+  app.places(socket, [], { joining: false });
+  assert.equal(app.$('places-note').textContent, 'Joining is closed. Open it from Connect controllers on the TV.');
+  app.places(socket, [app.place(1)]);
+  app.placeButtons()[0].button.onclick();
+  assert.deepEqual(socket.sent.at(-1), { type: 'join', name: '', code: '123456', clientId: socket.sent[0].clientId, slot: 1 });
+  assert.equal(app.$('remote-status').textContent, 'Joining…');
+  app.places(socket, [app.place(4)], { message: 'Player 1 was just taken. Choose another player.' });
+  assert.equal(app.$('remote-status').textContent, 'Player 1 was just taken. Choose another player.', 'someone was quicker: choose again');
+  assert.deepEqual(app.placeButtons().map(b => b.label), ['P4 Player 4']);
+  app.placeButtons()[0].button.onclick();
+  socket.onmessage({ data: JSON.stringify({ type: 'joined', slot: 4, color: '#e1ab23' }) });
+  assert.equal(app.$('join-screen').hidden, true); assert.equal(app.$('places-card').hidden, true);
+  assert.equal(app.$('slot-label').textContent, 'P4');
 });
 
 test('motion turned down: the buttons work, a retry is offered, and the TV is told', async () => {
@@ -430,6 +543,26 @@ test('quitting from the phone takes two taps, and the console can remove a phone
   assert.equal(app.$('join-screen').hidden, false);
   assert.match(app.$('remote-status').textContent, /removed this phone/);
   assert.equal(app.sockets.length, 1, 'and it does not rejoin by itself');
+});
+
+test('mid-game a phone shows the code for another player to join, without anyone leaving the game', async () => {
+  const fetch = async url => ({ json: async () => (url === '/config' ? { joining: true, securePort: 3443, httpPort: 3000 } : {}) });
+  const app = await remote({ fetch }), socket = app.join();
+  app.activity(socket, { mode: 'game', title: 'sports', sport: 'tennis', layout: 'remote', nunchuk: false, name: 'Tennis', path: [] });
+  app.$('more-button').onclick();
+  await app.$('add-player').onclick();
+  assert.deepEqual([app.$('add-player').hidden, app.$('invite').hidden, app.$('invite-code').hidden], [true, false, false]);
+  assert.equal(app.$('invite-code').src, `/qr?url=${encodeURIComponent('http://pc.local:3000/remote?code=123456')}`,
+    'the plain address, which a new phone opens before it trusts the PC, even from the secure page');
+  const note = app.$('invite-note').children.map(part => (typeof part === 'string' ? part : part.textContent)).join('');
+  assert.equal(note, "Scan this with the new player's camera, on the same Wi-Fi. Or open pc.local:3000 and enter room code 123456.");
+  app.$('sheet-close').onclick();
+  assert.deepEqual([app.$('invite').hidden, app.$('add-player').hidden], [true, false], 'closing the sheet puts the code away');
+
+  const closed = await remote({ fetch: async () => ({ json: async () => ({ joining: false }) }) }); closed.join();
+  await closed.$('add-player').onclick();
+  assert.equal(closed.$('invite-note').textContent, 'Joining is closed. Open it from Connect controllers on the TV.');
+  assert.equal(closed.$('invite-code').hidden, true, 'no code that would only be turned away');
 });
 
 test('in a game the sheet says Home › Wii Menu quits too, and offers the other screen only when there is one', async () => {
