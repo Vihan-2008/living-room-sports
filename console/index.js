@@ -8,6 +8,7 @@ import { createDolphinManager, findDolphin, resolveUserDir, dolphinVersion, exis
 import { createDsuServer, padFromPhone } from './dsu.js';
 import { pick as nativePick } from './dialogs.js';
 import { createDisplays } from './screens.js';
+import { checkFirewall, firewallAdvice, openFirewallSettings } from './firewall.js';
 import { PHONE_TO_DSU } from '../public/bindings.js';
 
 const MAX_BODY = 64 * 1024;
@@ -32,7 +33,8 @@ function readJson(req) {
   });
 }
 
-export function createConsole({ dataDir, dsuPort = 26760, getPhones = () => [], focusApp = () => {}, hooks = {} } = {}) {
+// ports: the ports phones open, which the firewall has to let in.
+export function createConsole({ dataDir, dsuPort = 26760, ports = [], getPhones = () => [], focusApp = () => {}, hooks = {} } = {}) {
   const settings = createSettings(dataDir);
   const listeners = new Set();
   const dsu = createDsuServer({ port: dsuPort });
@@ -45,6 +47,10 @@ export function createConsole({ dataDir, dsuPort = 26760, getPhones = () => [], 
   let dsuError = null;
   // A test that fakes Dolphin gets no real screen helper unless it brings its own.
   const displays = 'displays' in hooks ? hooks.displays : hooks.spawn ? null : createDisplays({ onChange: () => notify() });
+  const program = process.execPath;
+  const askFirewall = hooks.checkFirewall || (hooks.spawn ? async () => null : () => checkFirewall({ program, ports }));
+  const openFirewall = hooks.openFirewall || openFirewallSettings;
+  let firewall = null, firewallAt = 0, firewallRun = null;
 
   const dolphin = createDolphinManager({
     settings, dataDir, dsuPort: () => dsu.port, focusApp, userDirOf, displays,
@@ -58,6 +64,19 @@ export function createConsole({ dataDir, dsuPort = 26760, getPhones = () => [], 
     const found = await exists(dolphinPath);
     const user = found ? await userDirOf(dolphinPath).catch(() => null) : null;
     dolphinInfo = { path: dolphinPath, found, version: found && !hooks.spawn ? await dolphinVersion(dolphinPath) : null, userDir: user?.dir || null, userDirReason: user?.reason || null };
+  }
+
+  // Asked when the console starts and whenever Connect controllers opens, at most twice a minute: the answer changes
+  // when the PC joins another network or the player changes the setting. It takes Windows a few seconds.
+  function refreshFirewall({ force = false } = {}) {
+    if (firewallRun) return firewallRun;
+    if (!force && Date.now() - firewallAt < 30000) return Promise.resolve();
+    firewallRun = Promise.resolve().then(askFirewall).then(verdict => {
+      firewallAt = Date.now();
+      const next = verdict?.blocked ? { ...verdict, ...firewallAdvice(verdict, program) } : verdict || null;
+      if (JSON.stringify(next) !== JSON.stringify(firewall)) { firewall = next; notify(); }
+    }).catch(() => {}).finally(() => { firewallRun = null; });
+    return firewallRun;
   }
 
   async function scan() {
@@ -101,6 +120,7 @@ export function createConsole({ dataDir, dsuPort = 26760, getPhones = () => [], 
       setup: setupSteps(s),
       dsu: { ...dsu.info(), error: dsuError },
       https,
+      firewall,
       phones: getPhones(),
       screens: (displays?.screens || []).map(({ id, name, primary, width, height }) => ({ id, name, primary, width, height }))
     };
@@ -185,7 +205,9 @@ export function createConsole({ dataDir, dsuPort = 26760, getPhones = () => [], 
     'POST /api/stop': async body => { await dolphin.stop({ foreign: body.foreign === true }); return state(); },
     'POST /api/screens': async () => { await displays?.list().catch(() => {}); return state(); },
     'POST /api/screen': async body => { await dolphin.moveTo(typeof body.to === 'string' ? body.to.slice(0, 64) : 'next'); return state(); },
-    'POST /api/exit/dismiss': async () => { dolphin.clearLastExit(); return state(); }
+    'POST /api/exit/dismiss': async () => { dolphin.clearLastExit(); return state(); },
+    'POST /api/firewall/open': async () => { openFirewall(); return state(); },
+    'POST /api/firewall/check': async () => { await refreshFirewall({ force: true }); return state(); }
   };
 
   async function api(req, res, url) {
@@ -208,12 +230,13 @@ export function createConsole({ dataDir, dsuPort = 26760, getPhones = () => [], 
     await dolphin.restore().catch(() => {});
     try { await dsu.start(); } catch (error) { dsuError = `Phone controllers for Dolphin are unavailable: ${error.message}`; }
     displays?.list().catch(() => {});
+    refreshFirewall();
     await refreshDolphin();
     await scan();
   }
 
   return {
-    start, api, state, scan, settings, dolphin, dsu,
+    start, api, state, scan, settings, dolphin, dsu, refreshFirewall,
     onChange(listener) { listeners.add(listener); return () => listeners.delete(listener); },
     notify,
     setHttps(value) { https = { ...https, ...value }; notify(); },

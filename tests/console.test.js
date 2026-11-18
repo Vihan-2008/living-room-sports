@@ -16,6 +16,7 @@ import { createDsuServer, crc32, padFromPhone, PROTOCOL_VERSION } from '../conso
 import { createAuthority, issueServerCertificate, createCertificateStore, isPermittedAddress } from '../console/certs.js';
 import { candidatePaths, findDolphin, resolveUserDir, classifyExit, launchArgs, dsuEntries, createDolphinManager, asksForWiiMenu, followLog } from '../console/dolphin.js';
 import { createDisplays } from '../console/screens.js';
+import { firewallVerdict, firewallAdvice, checkFirewall } from '../console/firewall.js';
 import { fakeWindows, until, MAIN, SECOND, MAIN_ONLY } from './fake-windows.js';
 import { PHONE_TO_DSU, mkwRows, brawlRows, remoteRows } from '../public/bindings.js';
 import { SPORTS, ENTRY_COUNT, activityNeeds, activityGuide, MKW_MODES, BRAWL_MODES, sportById } from '../public/catalog.js';
@@ -610,4 +611,40 @@ test('a running game moves to the other screen and the next game opens there too
   const elsewhere = await dolphinFixture(t);
   await elsewhere.manager.launch({ title: 'mkw' });
   await assert.rejects(elsewhere.manager.moveTo(), { code: 'unsupported' });
+});
+
+// ---- Windows Firewall ---------------------------------------------------------------------------
+test('the firewall check finds a program allowed on one kind of network only, as Windows\' own prompt leaves it', async () => {
+  const ports = [3000, 3443];
+  // What this PC's firewall reported: Node.js allowed on Public networks only, by the rules Windows' prompt makes.
+  const node = [{ name: 'Node.js JavaScript Runtime', action: 'Allow', profile: 'Public', protocol: 'TCP', ports: 'Any' },
+    { name: 'Node.js JavaScript Runtime', action: 'Allow', profile: 'Public', protocol: 'UDP', ports: 'Any' }];
+  const profiles = ['Domain', 'Private', 'Public'].map(name => ({ name, enabled: 'True', inbound: 'Block' }));
+  const on = (category, rules = node, profileList = profiles) => firewallVerdict({ networks: [{ name: 'NETGEAR73', category }], profiles: profileList, rules }, ports);
+  assert.deepEqual(on('Private'), { blocked: true, network: 'NETGEAR73', category: 'Private', rule: 'Node.js JavaScript Runtime' });
+  assert.deepEqual(on('Public'), { blocked: false });
+  assert.equal(on('DomainAuthenticated').category, 'Domain', 'a work network is the Domain profile');
+  assert.deepEqual(on('Private', [{ ...node[0], profile: 'Domain, Private' }]), { blocked: false }, 'one rule can cover several kinds of network');
+  assert.deepEqual(on('Private', [{ ...node[0], profile: 'Any' }]), { blocked: false });
+  assert.equal(on('Public', [...node, { ...node[0], action: 'Block' }]).blocked, true, 'a block rule wins over an allow rule');
+  assert.equal(on('Public', [{ ...node[0], protocol: 'UDP' }]).blocked, true, 'phones connect over TCP');
+  assert.equal(on('Public', [{ ...node[0], ports: '3000' }]).blocked, true, 'a rule for one port leaves the secure port shut');
+  assert.deepEqual(on('Public', [{ ...node[0], ports: '3000,3443' }]), { blocked: false });
+  assert.equal(on('Public', []).rule, null, 'a program Windows has never asked about has no rule to tick');
+  assert.deepEqual(on('Private', node, profiles.map(p => ({ ...p, enabled: 'False' }))), { blocked: false }, 'nothing is blocked with the firewall off');
+  assert.deepEqual(on('Private', node, profiles.map(p => ({ ...p, inbound: 'Allow' }))), { blocked: false });
+  assert.deepEqual(firewallVerdict({ networks: [], profiles, rules: node }, ports), { blocked: false }, 'not on a network: nothing to say about the firewall');
+  // PowerShell's JSON gives a lone network or rule as an object, not a list of one.
+  assert.equal(firewallVerdict({ networks: { name: 'NETGEAR73', category: 'Private' }, profiles, rules: node[0] }, ports).blocked, true);
+
+  const advice = firewallAdvice(on('Private'), String.raw`C:\Program Files\nodejs\node.exe`);
+  assert.equal(advice.message, 'Phones cannot reach this PC: Windows Firewall blocks Node.js on NETGEAR73, a Private network.');
+  assert.equal(advice.next, 'Press Open firewall settings, then Change settings. Tick Private next to Node.js JavaScript Runtime, press OK, then press Check again.');
+  assert.ok(firewallAdvice(on('Public', []), String.raw`C:\Program Files\nodejs\node.exe`).next
+    .includes(String.raw`Allow another app. Browse to C:\Program Files\nodejs\node.exe, press Add, tick Public next to it`), 'with no rule yet, the program is added by its path');
+
+  assert.deepEqual(await checkFirewall({ ports, run: async program => JSON.stringify({ networks: [{ name: 'Home', category: 'Private' }], profiles, rules: program === 'node.exe' ? node : [] }), program: 'node.exe' }),
+    { blocked: true, network: 'Home', category: 'Private', rule: 'Node.js JavaScript Runtime' });
+  assert.equal(await checkFirewall({ ports, run: async () => 'not json' }), null, 'an answer Windows could not give is no answer, not a block');
+  assert.equal(await checkFirewall({ ports, run: null }), null);
 });

@@ -135,13 +135,20 @@ function joinPanel(ctx) {
     const address = config.addresses[0];
     const players = state.settings.controls.players;
     const padConnected = !!ctx.input.activePad();
-    fill(root, 
+    const blocked = !!state.firewall?.blocked;
+    fill(root,
       h('div', { class: 'join-code' },
         address ? h('img', { class: 'qr', src: `/qr?url=${encodeURIComponent(address)}`, alt: 'Code to scan with a phone' }) : h('div', { class: 'qr qr-missing' }, 'No network'),
         address ? h('p', { class: 'join-address' }, shortAddress(address)) : h('p', { class: 'note small' }, 'This PC is not on a network. Connect it to the same Wi-Fi as the phones.'),
         h('p', { class: 'small muted' }, `Room code ${config.code}`),
         config.addresses.length > 1 ? h('p', { class: 'small muted' }, `If that does not open, try ${config.addresses.slice(1, 3).map(shortAddress).join(' or ')}`) : null),
       h('div', { class: 'join-side' },
+        // While Windows turns every phone away this comes first, and the phone-only settings below make way for it.
+        blocked ? h('div', { class: 'firewall stack' },
+          status({ done: false, message: state.firewall.message, next: state.firewall.next }),
+          h('div', { class: 'row-actions' },
+            button('Open firewall settings', () => ctx.attempt(() => ctx.api('/api/firewall/open', {})), { kind: 'primary', isDefault: true }),
+            button('Check again', () => ctx.attempt(() => ctx.api('/api/firewall/check', {}))))) : null,
         h('ul', { class: 'slots' }, [0, 1, 2, 3].map(i => {
           const phone = ctx.roster[i], kind = players[i];
           let text, detail = null, actions = [];
@@ -159,8 +166,8 @@ function joinPanel(ctx) {
           return h('li', { class: phone?.connected ? 'is-connected' : '' }, h('span', { class: 'role-player', style: { background: PLAYER_COLORS[i] } }, `P${i + 1}`),
             h('div', { class: 'slot-text' }, h('p', {}, text), detail ? h('p', { class: 'small muted' }, detail) : null), h('div', { class: 'slot-actions' }, actions));
         })),
-        setting('New phones can join', onOff(config.joining && state.settings.phones.joining, value => { ctx.send({ type: 'joining', open: value }); config.joining = value; }, 'Joining')),
-        state.https.ready ? h('p', { class: 'small muted' }, 'For motion controls, each phone trusts this PC once; the phone shows how the first time it joins.')
+        blocked ? null : setting('New phones can join', onOff(config.joining && state.settings.phones.joining, value => { ctx.send({ type: 'joining', open: value }); config.joining = value; }, 'Joining')),
+        blocked ? null : state.https.ready ? h('p', { class: 'small muted' }, 'For motion controls, each phone trusts this PC once; the phone shows how the first time it joins.')
           : h('p', { class: 'small note' }, state.https.error || 'Motion controls are starting…')));
   });
   load();

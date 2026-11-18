@@ -20,7 +20,8 @@ function discImage(id, title) {
 }
 
 // displays: a screen helper for the console; without one, screens are not reported and games cannot move.
-async function fixture(t, { players, displays } = {}) {
+// firewall: stands in for asking Windows Firewall, and for opening its settings.
+async function fixture(t, { players, displays, firewall } = {}) {
   const dir = await mkdtemp(join(tmpdir(), 'lrs-api-'));
   const exe = join(dir, 'Dolphin-x64', 'Dolphin.exe'), userDir = join(dir, 'DolphinUser'), games = join(dir, 'Games');
   await mkdir(join(dir, 'Dolphin-x64'), { recursive: true }); await writeFile(exe, 'stub');
@@ -39,7 +40,8 @@ async function fixture(t, { players, displays } = {}) {
     processes: async () => spawned.filter(s => !s.exited).map(s => s.child.pid),
     close: async pid => { closed.push(pid); const s = spawned.find(x => x.child.pid === pid); if (s && !s.exited) { s.exited = true; s.child.emit('exit', 0, null); } },
     pick: async kind => (kind === 'dolphin' ? [exe] : [games]),
-    ...(displays ? { displays } : {})
+    ...(displays ? { displays } : {}),
+    ...(firewall ? { checkFirewall: firewall.check, openFirewall: firewall.open } : {})
   };
   let app;
   const consoleApi = createConsole({ dataDir: join(dir, 'data'), dsuPort: 0, getPhones: () => app.roster(), hooks });
@@ -235,4 +237,20 @@ test('the menu and the phones can move a running game to the other screen, and t
   await until(() => windows.window.x === 0);
   assert.equal((await phone.get('activity', a => a.screen === 'Main screen')).mode, 'game');
   await until(async () => (await f.call('/api/state')).body.settings.launch.screen === 'main');
+});
+
+test('a firewall that turns phones away is reported with the exact fix, and checked again on request', async t => {
+  const answers = [{ blocked: true, network: 'NETGEAR73', category: 'Private', rule: 'Node.js JavaScript Runtime' }, { blocked: false }];
+  let asked = 0, opened = 0;
+  const f = await fixture(t, { firewall: { check: async () => answers[Math.min(asked++, answers.length - 1)], open: () => { opened++; } } });
+  await until(async () => (await f.call('/api/state')).body.firewall?.blocked === true);
+  const { firewall } = (await f.call('/api/state')).body;
+  assert.equal(firewall.message, 'Phones cannot reach this PC: Windows Firewall blocks Node.js on NETGEAR73, a Private network.');
+  assert.match(firewall.next, /Tick Private next to Node\.js JavaScript Runtime/);
+  await f.consoleApi.refreshFirewall();
+  assert.equal(asked, 1, 'opening Connect controllers again soon after does not ask Windows again');
+  assert.equal((await f.call('/api/firewall/open', {})).status, 200);
+  assert.equal(opened, 1);
+  assert.deepEqual((await f.call('/api/firewall/check', {})).body.firewall, { blocked: false }, 'Check again always asks');
+  assert.equal(asked, 2);
 });
